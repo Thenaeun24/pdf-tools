@@ -11,9 +11,9 @@ interface PdfImageConverterProps {
   addToast: AddToast;
 }
 
-const SUBTABS: { id: SubTab; label: string }[] = [
-  { id: 'pdf-to-image', label: 'PDF → 이미지' },
-  { id: 'image-to-pdf', label: '이미지 → PDF' },
+const SUBTABS: { id: SubTab; label: string; icon: string }[] = [
+  { id: 'pdf-to-image', label: 'PDF → 이미지', icon: '🖼' },
+  { id: 'image-to-pdf', label: '이미지 → PDF', icon: '📄' },
 ];
 
 export default function PdfImageConverter({
@@ -23,7 +23,7 @@ export default function PdfImageConverter({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="inline-flex w-full max-w-md rounded-full border border-zinc-200/90 bg-zinc-100/80 p-1 sm:w-auto">
+      <div className="inline-flex w-full max-w-md rounded-full border border-white/80 bg-white/70 p-1 shadow-sm shadow-indigo-900/5 backdrop-blur sm:w-auto">
         {SUBTABS.map((t) => {
           const active = t.id === sub;
           return (
@@ -32,13 +32,22 @@ export default function PdfImageConverter({
               type="button"
               onClick={() => setSub(t.id)}
               className={[
-                'flex-1 rounded-full px-5 py-2.5 text-sm font-medium transition-all sm:flex-none',
+                'focus-ring relative flex-1 rounded-full px-5 py-2.5 text-sm font-semibold transition-all sm:flex-none',
                 active
-                  ? 'bg-zinc-900 text-white shadow-sm shadow-zinc-900/20'
-                  : 'text-zinc-500 hover:text-zinc-900',
+                  ? 'text-white shadow-lg shadow-violet-500/30'
+                  : 'text-slate-600 hover:text-indigo-700',
               ].join(' ')}
             >
-              {t.label}
+              {active ? (
+                <span
+                  aria-hidden
+                  className="brand-gradient animate-gradient absolute inset-0 rounded-full"
+                />
+              ) : null}
+              <span className="relative inline-flex items-center gap-1.5">
+                <span aria-hidden>{t.icon}</span>
+                {t.label}
+              </span>
             </button>
           );
         })}

@@ -201,53 +201,62 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
           description="업로드된 파일은 브라우저에서만 처리됩니다."
         />
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm shadow-zinc-900/5">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-800">
-              {file.name}
-            </p>
-            <p className="text-xs text-zinc-500">
-              {formatFileSize(file.size)}
-              {' · '}
-              {pageCount == null ? (
-                <span className="text-zinc-400">페이지 계산 중...</span>
-              ) : pageCount < 0 ? (
-                <span className="text-rose-600">읽기 실패</span>
-              ) : (
-                <span>{pageCount}페이지</span>
-              )}
-            </p>
+        <div className="panel-premium flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-base shadow-lg shadow-violet-500/30"
+            >
+              ✂️
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {file.name}
+              </p>
+              <p className="text-xs font-medium text-slate-500">
+                {formatFileSize(file.size)}
+                <span className="mx-1 text-slate-300">·</span>
+                {pageCount == null ? (
+                  <span className="text-slate-400">페이지 계산 중...</span>
+                ) : pageCount < 0 ? (
+                  <span className="font-semibold text-rose-600">읽기 실패</span>
+                ) : (
+                  <span className="font-semibold text-indigo-600">
+                    {pageCount}페이지
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={reset}
-            className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
-          >
+          <button type="button" onClick={reset} className="btn-ghost">
             다른 파일 선택
           </button>
         </div>
       )}
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5">
-        <p className="text-sm font-semibold text-zinc-800">분할 방식</p>
+      <div className="panel-premium flex flex-col gap-3 p-5">
+        <p className="flex items-center gap-2 text-sm font-bold text-slate-800">
+          <span aria-hidden>✂️</span>
+          <span className="gradient-text">분할 방식</span>
+        </p>
         <label
           className={[
-            'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors',
+            'flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 text-sm transition-all',
             mode === 'per-page'
-              ? 'border-zinc-800 bg-zinc-100'
-              : 'border-zinc-200 hover:border-zinc-300',
+              ? 'border-violet-400 bg-gradient-to-br from-indigo-50 to-fuchsia-50 shadow-sm shadow-violet-500/10'
+              : 'border-slate-200 bg-white/60 hover:border-indigo-300 hover:bg-white',
           ].join(' ')}
         >
           <input
             type="radio"
             name="split-mode"
-            className="mt-1"
+            className="mt-1 accent-violet-500"
             checked={mode === 'per-page'}
             onChange={() => setMode('per-page')}
           />
           <div>
-            <p className="font-medium text-zinc-800">페이지별 분할</p>
-            <p className="text-xs text-zinc-500">
+            <p className="font-semibold text-slate-900">페이지별 분할</p>
+            <p className="text-xs text-slate-500">
               각 페이지를 개별 PDF로 만듭니다.
             </p>
           </div>
@@ -255,23 +264,26 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
 
         <label
           className={[
-            'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 text-sm transition-colors',
+            'flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 text-sm transition-all',
             mode === 'ranges'
-              ? 'border-zinc-800 bg-zinc-100'
-              : 'border-zinc-200 hover:border-zinc-300',
+              ? 'border-violet-400 bg-gradient-to-br from-indigo-50 to-fuchsia-50 shadow-sm shadow-violet-500/10'
+              : 'border-slate-200 bg-white/60 hover:border-indigo-300 hover:bg-white',
           ].join(' ')}
         >
           <input
             type="radio"
             name="split-mode"
-            className="mt-1"
+            className="mt-1 accent-violet-500"
             checked={mode === 'ranges'}
             onChange={() => setMode('ranges')}
           />
           <div className="flex-1">
-            <p className="font-medium text-zinc-800">범위 지정 분할</p>
-            <p className="text-xs text-zinc-500">
-              예: <code className="rounded bg-zinc-100 px-1">1-3, 4-7, 8-10</code>{' '}
+            <p className="font-semibold text-slate-900">범위 지정 분할</p>
+            <p className="text-xs text-slate-500">
+              예:{' '}
+              <code className="rounded-md bg-indigo-100/80 px-1.5 py-0.5 font-mono text-indigo-700">
+                1-3, 4-7, 8-10
+              </code>{' '}
               — 쉼표로 구분된 페이지 또는 범위를 입력하세요.
             </p>
             {mode === 'ranges' ? (
@@ -280,7 +292,7 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
                 value={rangeInput}
                 onChange={(e) => setRangeInput(e.target.value)}
                 placeholder="1-3, 4-7, 8-10"
-                className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                className="focus-ring mt-2 w-full rounded-xl border border-indigo-200 bg-white/90 px-3 py-2 text-sm font-medium text-slate-800 transition-colors hover:border-indigo-400"
               />
             ) : null}
           </div>
@@ -292,9 +304,9 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
           type="button"
           onClick={handleSplit}
           disabled={!file || splitting || pageCount == null}
-          className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="btn-primary focus-ring"
         >
-          {splitting ? '분할 중...' : '분할하기'}
+          {splitting ? '✨ 분할 중...' : '✂️ 분할하기'}
         </button>
       </div>
 

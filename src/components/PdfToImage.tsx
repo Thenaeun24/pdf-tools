@@ -120,46 +120,54 @@ export default function PdfToImage({ addToast }: PdfToImageProps) {
           description="업로드된 파일은 브라우저에서만 처리됩니다."
         />
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm shadow-zinc-900/5">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-800">
-              {file.name}
-            </p>
-            <p className="text-xs text-zinc-500">{fileSizeLabel}</p>
+        <div className="panel-premium flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+          <div className="min-w-0 flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-base shadow-lg shadow-violet-500/30"
+            >
+              📄
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {file.name}
+              </p>
+              <p className="text-xs font-medium text-slate-500">{fileSizeLabel}</p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={reset}
-            className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
-          >
+          <button type="button" onClick={reset} className="btn-ghost">
             다른 파일 선택
           </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-zinc-800">형식</span>
+      <div className="panel-premium grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            형식
+          </span>
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value as ImageFormat)}
             disabled={converting}
-            className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-800 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:opacity-60"
+            className="focus-ring rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5 font-medium text-slate-800 transition-colors hover:border-indigo-300 disabled:opacity-60"
           >
             <option value="png">PNG (무손실)</option>
             <option value="jpeg">JPG (고압축)</option>
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-zinc-800">해상도</span>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            해상도
+          </span>
           <select
             value={scale}
             onChange={(e) =>
               setScale(Number(e.target.value) as ImageScale)
             }
             disabled={converting}
-            className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-800 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:opacity-60"
+            className="focus-ring rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5 font-medium text-slate-800 transition-colors hover:border-indigo-300 disabled:opacity-60"
           >
             <option value={1}>1x (표준)</option>
             <option value={2}>2x (선명)</option>
@@ -173,18 +181,18 @@ export default function PdfToImage({ addToast }: PdfToImageProps) {
           type="button"
           onClick={handleConvert}
           disabled={!file || converting}
-          className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="btn-primary focus-ring"
         >
-          {converting ? '변환 중...' : '변환하기'}
+          {converting ? '✨ 변환 중...' : '✨ 변환하기'}
         </button>
 
         {results.length > 0 ? (
           <button
             type="button"
             onClick={downloadZip}
-            className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-100"
+            className="btn-secondary focus-ring"
           >
-            전체 ZIP 다운로드
+            📦 전체 ZIP 다운로드
           </button>
         ) : null}
       </div>
@@ -198,33 +206,36 @@ export default function PdfToImage({ addToast }: PdfToImageProps) {
 
       {results.length > 0 ? (
         <div>
-          <h3 className="mb-3 text-sm font-semibold text-zinc-800">
-            미리보기 ({results.length}페이지)
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <span className="gradient-text text-base">✨ 미리보기</span>
+            <span className="rounded-full bg-indigo-100/80 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+              {results.length}페이지
+            </span>
           </h3>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {results.map((img) => (
               <li
                 key={img.pageNumber}
-                className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm"
+                className="panel-premium group flex flex-col overflow-hidden p-0 transition-transform hover:-translate-y-0.5"
               >
-                <div className="flex aspect-[3/4] items-center justify-center overflow-hidden bg-zinc-100">
+                <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-t-[1.25rem] bg-gradient-to-br from-slate-100 to-indigo-50">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={img.dataUrl}
                     alt={`페이지 ${img.pageNumber}`}
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                 </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-xs font-medium text-zinc-600">
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <span className="text-xs font-semibold text-slate-600">
                     페이지 {img.pageNumber}
                   </span>
                   <button
                     type="button"
                     onClick={() => downloadOne(img)}
-                    className="rounded-lg px-2 py-1 text-xs font-semibold text-zinc-800 hover:bg-zinc-100"
+                    className="rounded-lg px-2 py-1 text-xs font-bold text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-800"
                   >
-                    다운로드
+                    ⬇ 다운로드
                   </button>
                 </div>
               </li>

@@ -88,10 +88,10 @@ function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
       ref={setNodeRef}
       style={style}
       className={[
-        'flex items-center gap-3 rounded-lg border bg-white px-3 py-2.5',
+        'panel-soft flex items-center gap-3 px-3 py-2.5 transition-all',
         isDragging
-          ? 'border-zinc-400 shadow-lg'
-          : 'border-zinc-200 hover:border-zinc-300',
+          ? 'border-violet-400 shadow-xl shadow-violet-500/20'
+          : 'hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-500/10',
       ].join(' ')}
     >
       <button
@@ -99,21 +99,23 @@ function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
         {...attributes}
         {...listeners}
         aria-label="드래그로 순서 변경"
-        className="flex h-8 w-6 flex-none cursor-grab items-center justify-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
+        className="flex h-8 w-6 flex-none cursor-grab items-center justify-center text-slate-400 transition-colors hover:text-indigo-600 active:cursor-grabbing"
       >
         ☰
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-zinc-800">
+        <p className="truncate text-sm font-semibold text-slate-800">
           {item.name}
         </p>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs font-medium text-slate-500">
           {formatFileSize(item.size)}
-          {' · '}
+          <span className="mx-1 text-slate-300">·</span>
           {pageCount == null ? (
-            <span className="text-zinc-400">페이지 계산 중...</span>
+            <span className="text-slate-400">페이지 계산 중...</span>
           ) : (
-            <span>{pageCount}페이지</span>
+            <span className="font-semibold text-indigo-600">
+              {pageCount}페이지
+            </span>
           )}
         </p>
       </div>
@@ -121,7 +123,7 @@ function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
         type="button"
         onClick={() => onRemove(item.id)}
         aria-label={`${item.name} 삭제`}
-        className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
       >
         ✕
       </button>
@@ -168,16 +170,16 @@ function SortablePageCard({
       ref={setNodeRef}
       style={style}
       className={[
-        'flex flex-col overflow-hidden rounded-lg border bg-white',
+        'panel-premium group flex flex-col overflow-hidden p-0 transition-all',
         isDragging
-          ? 'border-zinc-400 shadow-lg'
-          : 'border-zinc-200 hover:border-zinc-300',
+          ? 'border-violet-400 shadow-2xl shadow-violet-500/25'
+          : 'hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-500/15',
       ].join(' ')}
     >
       <div
         {...attributes}
         {...listeners}
-        className="relative flex aspect-[3/4] cursor-grab items-center justify-center overflow-hidden bg-zinc-100 active:cursor-grabbing"
+        className="relative flex aspect-[3/4] cursor-grab items-center justify-center overflow-hidden rounded-t-[1.25rem] bg-gradient-to-br from-slate-100 to-indigo-50 active:cursor-grabbing"
       >
         {page.thumbnail ? (
           <div className="flex h-full w-full items-center justify-center p-2">
@@ -194,25 +196,25 @@ function SortablePageCard({
             </div>
           </div>
         ) : (
-          <div className="flex h-full w-full animate-pulse items-center justify-center bg-zinc-200 text-xs text-zinc-400">
+          <div className="flex h-full w-full animate-pulse items-center justify-center bg-gradient-to-br from-indigo-100 to-fuchsia-100 text-xs font-medium text-indigo-400">
             불러오는 중...
           </div>
         )}
-        <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+        <span className="brand-gradient absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white shadow-md shadow-violet-500/40">
           {orderIndex + 1}
         </span>
         {page.rotation !== 0 ? (
-          <span className="absolute right-1.5 top-1.5 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+          <span className="absolute right-1.5 top-1.5 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur">
             {page.rotation}°
           </span>
         ) : null}
       </div>
-      <div className="flex items-center justify-around gap-1 border-t border-zinc-100 px-2 py-1.5">
+      <div className="flex items-center justify-around gap-1 border-t border-white/80 bg-white/40 px-2 py-1.5 backdrop-blur">
         <button
           type="button"
           onClick={() => onRotate(page.id)}
           title="90° 회전"
-          className="rounded p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
         >
           🔄
         </button>
@@ -220,7 +222,7 @@ function SortablePageCard({
           type="button"
           onClick={() => onDuplicate(page.id)}
           title="복제"
-          className="rounded p-1.5 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
         >
           📋
         </button>
@@ -228,7 +230,7 @@ function SortablePageCard({
           type="button"
           onClick={() => onRemove(page.id)}
           title="삭제"
-          className="rounded p-1.5 text-zinc-600 hover:bg-rose-50 hover:text-rose-600"
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-rose-50 hover:text-rose-600"
         >
           🗑
         </button>
@@ -632,14 +634,16 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           <button
             type="button"
             onClick={backToStep1}
-            className="inline-flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900"
+            className="btn-ghost"
           >
             ◀ 파일 선택으로 돌아가기
           </button>
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-slate-600">
             총{' '}
-            <span className="font-semibold text-zinc-800">{pages.length}</span>
-            페이지
+            <span className="gradient-text text-base font-bold">
+              {pages.length}
+            </span>
+            <span className="ml-1 font-semibold">페이지</span>
           </p>
         </div>
 
@@ -647,17 +651,17 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           <button
             type="button"
             onClick={triggerAddPages}
-            className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
+            className="btn-secondary focus-ring"
           >
-            + 페이지 추가 (PDF / 이미지)
+            ＋ 페이지 추가 (PDF / 이미지)
           </button>
           <button
             type="button"
             onClick={handleDownload}
             disabled={pages.length === 0 || finalizing}
-            className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+            className="btn-primary focus-ring"
           >
-            {finalizing ? '생성 중...' : '최종 PDF 다운로드'}
+            {finalizing ? '✨ 생성 중...' : '✨ 최종 PDF 다운로드'}
           </button>
           <input
             ref={addPagesInputRef}
@@ -717,18 +721,20 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
       {files.length > 0 ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-zinc-600">
-              <span className="font-semibold text-zinc-800">
+            <p className="text-sm text-slate-600">
+              <span className="gradient-text text-base font-bold">
                 {files.length}
               </span>
-              개 PDF · 드래그로 순서 변경
+              <span className="ml-1 font-semibold">개 PDF</span>
+              <span className="mx-1.5 text-slate-300">·</span>
+              <span className="text-xs text-slate-500">드래그로 순서 변경</span>
             </p>
             <button
               type="button"
               onClick={clearAllFiles}
-              className="text-sm font-medium text-zinc-500 hover:text-rose-600"
+              className="btn-ghost hover:!text-rose-600"
             >
-              전체 삭제
+              🗑 전체 삭제
             </button>
           </div>
 
@@ -755,37 +761,39 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           </DndContext>
 
           {/* ----- 정렬 옵션 접이식 패널 ----- */}
-          <div className="rounded-2xl border border-zinc-200/90 bg-white shadow-sm shadow-zinc-900/5">
+          <div className="panel-premium overflow-hidden">
             <button
               type="button"
               onClick={() => setSortPanelOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+              className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-bold text-slate-800 transition-colors hover:bg-indigo-50/50"
               aria-expanded={sortPanelOpen}
             >
-              <span>정렬 옵션</span>
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden>🎯</span> 정렬 옵션
+              </span>
               <span
-                className={`transition-transform ${sortPanelOpen ? 'rotate-180' : ''}`}
+                className={`text-indigo-500 transition-transform ${sortPanelOpen ? 'rotate-180' : ''}`}
               >
                 ▾
               </span>
             </button>
             {sortPanelOpen ? (
-              <div className="flex flex-col gap-3 border-t border-zinc-100 p-4">
+              <div className="flex flex-col gap-3 border-t border-white/80 p-4">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {SORT_OPTIONS.map((opt) => (
                     <label
                       key={opt.id}
                       className={[
-                        'flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm transition-colors',
+                        'flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all',
                         sortOption === opt.id
-                          ? 'border-zinc-800 bg-zinc-100 text-zinc-900'
-                          : 'border-zinc-200 text-zinc-700 hover:border-zinc-300',
+                          ? 'border-violet-400 bg-gradient-to-br from-indigo-50 to-fuchsia-50 text-indigo-900 shadow-sm shadow-violet-500/10'
+                          : 'border-slate-200 bg-white/60 text-slate-700 hover:border-indigo-300 hover:bg-white',
                       ].join(' ')}
                     >
                       <input
                         type="radio"
                         name="sort-option"
-                        className="mt-1"
+                        className="mt-1 accent-violet-500"
                         checked={sortOption === opt.id}
                         onChange={() => {
                           setSortOption(opt.id);
@@ -798,7 +806,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
                 </div>
 
                 {needsRank ? (
-                  <div className="whitespace-pre-line rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700">
+                  <div className="whitespace-pre-line rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-xs font-medium text-amber-900">
                     {RANK_HELP}
                   </div>
                 ) : null}
@@ -808,42 +816,42 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
                     type="button"
                     onClick={applySort}
                     disabled={files.length === 0}
-                    className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                    className="btn-primary focus-ring"
                   >
-                    정렬 적용
+                    ✓ 정렬 적용
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowSortPreview((v) => !v)}
                     disabled={files.length === 0}
-                    className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="btn-secondary focus-ring"
                   >
-                    {showSortPreview ? '미리보기 닫기' : '미리보기'}
+                    {showSortPreview ? '미리보기 닫기' : '👁 미리보기'}
                   </button>
                 </div>
 
                 {showSortPreview ? (
-                  <ol className="flex flex-col gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 text-sm">
+                  <ol className="flex flex-col gap-1.5 rounded-xl border border-indigo-100 bg-white/70 p-3 text-sm backdrop-blur">
                     {sortedPreview.map((f, idx) => {
                       const rank = extractRank(f.name);
                       return (
                         <li
                           key={f.id}
-                          className="flex items-center gap-2 text-zinc-700"
+                          className="flex items-center gap-2 text-slate-700"
                         >
-                          <span className="w-6 text-right font-mono text-xs text-zinc-500">
+                          <span className="w-6 text-right font-mono text-xs font-semibold text-indigo-500">
                             {idx + 1}.
                           </span>
                           {rank ? (
-                            <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-800">
+                            <span className="inline-flex items-center rounded-full bg-gradient-to-r from-indigo-100 to-fuchsia-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
                               {rank}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-[11px] font-medium text-zinc-500">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
                               (계급 미인식)
                             </span>
                           )}
-                          <span className="truncate">{f.name}</span>
+                          <span className="truncate font-medium">{f.name}</span>
                         </li>
                       );
                     })}
@@ -860,9 +868,9 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           type="button"
           onClick={handleMerge}
           disabled={files.length === 0 || merging}
-          className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+          className="btn-primary focus-ring"
         >
-          {merging ? '병합 중...' : '병합하기'}
+          {merging ? '✨ 병합 중...' : '🧩 병합하기'}
         </button>
       </div>
 
