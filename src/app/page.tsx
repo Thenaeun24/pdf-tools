@@ -27,12 +27,12 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-700 text-white shadow-sm">
+      <header className="border-b border-zinc-200/80 bg-white shadow-sm shadow-zinc-900/5">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-8 sm:py-10">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">
             PDF 편집 도구
           </h1>
-          <p className="text-sm text-indigo-100 sm:text-base">
+          <p className="max-w-xl text-sm leading-relaxed text-zinc-500 sm:text-base">
             브라우저에서 안전하게 PDF를 편집하세요
           </p>
         </div>
@@ -44,7 +44,7 @@ export default function HomePage() {
         onChange={(id) => setActiveTab(id as TabId)}
       />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-10">
         {activeTab === 'convert' ? (
           <PdfImageConverter addToast={addToast} />
         ) : null}

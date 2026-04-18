@@ -1200,31 +1200,31 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   }
 
   return (
-    <div className="flex flex-col gap-5 rounded-[2rem] bg-gradient-to-br from-amber-50 via-rose-50 to-violet-100/60 p-4 md:flex-row md:gap-6 md:p-6">
+    <div className="flex flex-col gap-6 rounded-2xl border border-zinc-200/80 bg-zinc-50/60 p-5 md:flex-row md:gap-8 md:p-6">
       {/* ---------------- 도구 패널 (사이드바/상단 툴바) ---------------- */}
       <aside className="flex flex-col gap-4 md:w-72 md:flex-none">
-        <div className="flex items-center justify-between gap-3 rounded-3xl border border-white/70 bg-white/70 px-5 py-4 shadow-lg shadow-violet-200/40 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-5 py-4 shadow-sm shadow-zinc-900/5">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-700">
+            <p className="truncate text-sm font-semibold text-zinc-900">
               {file.name}
             </p>
-            <p className="mt-0.5 text-xs font-medium text-violet-400">
+            <p className="mt-0.5 text-xs font-medium text-zinc-500">
               {totalPages}페이지
             </p>
           </div>
           <button
             type="button"
             onClick={resetAll}
-            className="shrink-0 rounded-2xl border border-rose-100 bg-white/80 px-3 py-1.5 text-xs font-semibold text-rose-400 shadow-sm shadow-rose-100/60 transition-all hover:-translate-y-0.5 hover:bg-rose-100/70 hover:text-rose-500 hover:shadow-md"
+            className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
           >
             다른 파일 열기
           </button>
         </div>
 
         {/* 도구 선택 */}
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-4 shadow-lg shadow-indigo-100/50 backdrop-blur-md">
-          <p className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-400">
-            ✿ 도구
+        <div className="rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm shadow-zinc-900/5">
+          <p className="mb-3 px-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+            도구
           </p>
           <div className="hide-scrollbar flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
             {TOOLS.map((t) => {
@@ -1240,10 +1240,10 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
                   }}
                   title={t.label}
                   className={[
-                    'flex shrink-0 items-center gap-2.5 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all duration-200',
+                    'flex shrink-0 items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
                     active
-                      ? 'scale-[1.02] bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 text-white shadow-lg shadow-fuchsia-200/60'
-                      : 'bg-white/60 text-slate-600 hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-600 hover:shadow-md hover:shadow-violet-100',
+                      ? 'bg-zinc-900 text-white shadow-sm'
+                      : 'bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900',
                   ].join(' ')}
                 >
                   <span aria-hidden className="text-base">{t.icon}</span>
@@ -1255,9 +1255,9 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 옵션 영역 */}
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-lg shadow-emerald-100/40 backdrop-blur-md">
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-500">
-            ❋ 옵션
+        <div className="rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+            옵션
           </p>
           {tool === 'highlight-free' || tool === 'highlight-line' ? (
             <div className="flex flex-col gap-3">
@@ -1341,13 +1341,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           ) : null}
 
           {tool === 'none' ? (
-            <p className="rounded-2xl bg-violet-50/80 px-3 py-2.5 text-xs font-medium text-violet-400">
+            <p className="rounded-xl bg-zinc-100 px-3 py-2.5 text-xs font-medium text-zinc-500">
               도구를 선택하면 옵션이 나타납니다.
             </p>
           ) : null}
 
           {tool === 'highlight-line' && lineStart ? (
-            <p className="mt-4 rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-yellow-50 px-3.5 py-2.5 text-[11px] font-medium text-amber-700 shadow-sm shadow-amber-100">
+            <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-[11px] font-medium text-zinc-700">
               시작점이 찍혔습니다. 끝점을 클릭하세요. (Shift: 수평 고정)
             </p>
           ) : null}
@@ -1358,7 +1358,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 액션 */}
-        <div className="flex flex-wrap items-center gap-1.5 rounded-3xl border border-white/70 bg-white/70 p-3 shadow-lg shadow-pink-100/40 backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-zinc-200/90 bg-white p-3 shadow-sm shadow-zinc-900/5">
           <ActionBtn
             onClick={handleUndo}
             disabled={!canUndo}
@@ -1388,12 +1388,9 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="group relative w-full overflow-hidden rounded-3xl bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 px-6 py-4 text-sm font-bold tracking-wide text-white shadow-xl shadow-fuchsia-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-fuchsia-300/70 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
+          className="w-full rounded-2xl bg-zinc-900 px-6 py-3.5 text-sm font-semibold tracking-wide text-white shadow-sm shadow-zinc-900/20 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none"
         >
-          <span className="relative z-10">
-            {saving ? '저장 중...' : '💾 마크업 PDF 저장'}
-          </span>
-          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+          {saving ? '저장 중...' : '💾 마크업 PDF 저장'}
         </button>
         {saving || saveProgress > 0 ? (
           <ProgressBar
@@ -1407,13 +1404,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       <div className="flex min-w-0 flex-1 flex-col gap-5">
         <div
           ref={containerRef}
-          className="relative mx-auto w-full max-w-[960px] select-none rounded-[2rem] border border-white/80 bg-white/60 p-5 shadow-xl shadow-indigo-100/50 backdrop-blur-md"
+          className="relative mx-auto w-full max-w-[960px] select-none rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5"
         >
           {loading || rendering ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm font-medium text-violet-400">
-              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-violet-300 [animation-delay:-0.3s]" />
-              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-fuchsia-300 [animation-delay:-0.15s]" />
-              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-pink-300" />
+            <div className="flex items-center justify-center gap-2 py-10 text-sm font-medium text-zinc-500">
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.3s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400" />
               <span className="ml-2">불러오는 중...</span>
             </div>
           ) : null}
@@ -1478,12 +1475,12 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
                   fontSize: textSize,
                   lineHeight: 1.2,
                   background: 'rgba(255,255,255,0.92)',
-                  border: '1.5px solid #c4b5fd',
-                  borderRadius: 14,
+                  border: '1px solid #d4d4d8',
+                  borderRadius: 10,
                   padding: '6px 12px',
                   minWidth: 140,
                   boxShadow:
-                    '0 8px 24px -4px rgba(167, 139, 250, 0.35), 0 0 0 4px rgba(221, 214, 254, 0.45)',
+                    '0 4px 14px -2px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(228, 228, 231, 0.9)',
                   backdropFilter: 'blur(4px)',
                   outline: 'none',
                   fontFamily:
@@ -1495,25 +1492,25 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 페이지 네비게이션 */}
-        <div className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-2 shadow-lg shadow-violet-100/50 backdrop-blur-md">
+        <div className="mx-auto flex items-center justify-center gap-1 rounded-full border border-zinc-200/90 bg-white px-2 py-2 shadow-sm shadow-zinc-900/5">
           <button
             type="button"
             onClick={() => gotoPage(pageNum - 1)}
             disabled={pageNum <= 1 || rendering}
-            className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-violet-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-violet-100 hover:to-fuchsia-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
+            className="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
           >
             ◀ 이전
           </button>
-          <p className="px-3 text-sm font-medium text-slate-500">
-            <span className="rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-base font-extrabold text-transparent">{pageNum}</span>
-            <span className="mx-1.5 text-slate-300">/</span>
-            <span className="font-semibold text-slate-600">{totalPages}</span>
+          <p className="px-3 text-sm font-medium text-zinc-500">
+            <span className="text-base font-semibold tabular-nums text-zinc-900">{pageNum}</span>
+            <span className="mx-1.5 text-zinc-300">/</span>
+            <span className="font-medium tabular-nums text-zinc-600">{totalPages}</span>
           </p>
           <button
             type="button"
             onClick={() => gotoPage(pageNum + 1)}
             disabled={pageNum >= totalPages || rendering}
-            className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-violet-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-violet-100 hover:to-fuchsia-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
+            className="rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
           >
             다음 ▶
           </button>
@@ -1536,7 +1533,7 @@ function OptionRow({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[11px] font-bold tracking-wider text-slate-500">{label}</span>
+      <span className="text-[11px] font-semibold tracking-wide text-zinc-500">{label}</span>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
@@ -1561,10 +1558,10 @@ function ColorSwatches({
           aria-label={`색상 ${c}`}
           style={{ background: c }}
           className={[
-            'h-8 w-8 rounded-full border-2 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-110',
+            'h-8 w-8 rounded-full border-2 border-zinc-200 shadow-sm transition-shadow hover:shadow-md',
             value === c
-              ? 'scale-110 border-white ring-2 ring-violet-400 ring-offset-2 ring-offset-white/40'
-              : 'border-white/80 hover:ring-2 hover:ring-violet-200',
+              ? 'ring-2 ring-zinc-900 ring-offset-2 ring-offset-white'
+              : 'hover:ring-1 hover:ring-zinc-300',
           ].join(' ')}
         />
       ))}
@@ -1593,10 +1590,10 @@ function SizeButtons<T extends number>({
             type="button"
             onClick={() => onChange(v)}
             className={[
-              'rounded-2xl px-3.5 py-1.5 text-xs font-semibold transition-all duration-200',
+              'rounded-xl border px-3.5 py-1.5 text-xs font-medium transition-colors',
               active
-                ? 'bg-gradient-to-r from-violet-400 to-fuchsia-400 text-white shadow-md shadow-fuchsia-200/60'
-                : 'bg-white/70 text-slate-500 shadow-sm hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-500 hover:shadow-md',
+                ? 'border-zinc-800 bg-zinc-900 text-white shadow-sm'
+                : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50',
             ].join(' ')}
           >
             {labels[i]}
@@ -1624,7 +1621,7 @@ function ActionBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex flex-1 items-center justify-center rounded-2xl bg-white/60 px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-pink-100 hover:to-violet-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:from-transparent disabled:hover:to-transparent disabled:hover:text-slate-300"
+      className="flex flex-1 items-center justify-center rounded-xl border border-transparent bg-white px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm transition-colors hover:border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-zinc-300 disabled:shadow-none disabled:hover:border-transparent"
     >
       {label}
     </button>

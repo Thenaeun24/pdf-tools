@@ -45,14 +45,14 @@ export default function FileDropZone({
         }
       }}
       className={[
-        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-all',
+        'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-8 py-12 text-center transition-all',
         disabled
-          ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+          ? 'cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400'
           : isDragReject
-            ? 'border-rose-400 bg-rose-50 text-rose-700'
+            ? 'border-rose-300 bg-rose-50/80 text-rose-800'
             : isDragActive
-              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-              : 'border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:bg-indigo-50/40',
+              ? 'border-zinc-500 bg-white text-zinc-900 shadow-md shadow-zinc-900/10'
+              : 'border-zinc-300 bg-zinc-50/40 text-zinc-600 hover:border-zinc-400 hover:bg-white hover:shadow-sm',
       ].join(' ')}
     >
       <input {...getInputProps()} />
@@ -64,7 +64,7 @@ export default function FileDropZone({
         strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="h-10 w-10 opacity-80"
+        className="h-10 w-10 text-zinc-400 opacity-90"
       >
         <path d="M12 16V4" />
         <path d="m7 9 5-5 5 5" />
@@ -74,7 +74,7 @@ export default function FileDropZone({
         {isDragActive ? '여기에 놓으세요' : label}
       </p>
       {description ? (
-        <p className="text-xs text-slate-500">{description}</p>
+        <p className="text-xs text-zinc-500">{description}</p>
       ) : null}
     </div>
   );

@@ -169,16 +169,16 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
           description="업로드된 파일은 브라우저에서만 처리됩니다."
         />
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm shadow-zinc-900/5">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-slate-800">
+            <p className="truncate text-sm font-medium text-zinc-800">
               {file.name}
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-zinc-500">
               {formatFileSize(file.size)}
               {' · '}
               {pageCount == null ? (
-                <span className="text-slate-400">페이지 계산 중...</span>
+                <span className="text-zinc-400">페이지 계산 중...</span>
               ) : pageCount < 0 ? (
                 <span className="text-rose-600">읽기 실패</span>
               ) : (
@@ -189,7 +189,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
           <button
             type="button"
             onClick={reset}
-            className="text-sm font-medium text-slate-500 hover:text-rose-600"
+            className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
           >
             다른 파일 선택
           </button>
@@ -198,8 +198,8 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
 
       {file && pageCount != null && pageCount > 0 ? (
         <>
-          <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-sm font-semibold text-slate-700">
+          <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5">
+            <p className="text-sm font-semibold text-zinc-800">
               전체 일괄 회전
             </p>
             <div className="flex flex-wrap gap-2">
@@ -208,7 +208,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
                   key={deg}
                   type="button"
                   onClick={() => setAllRotation(deg)}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                  className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
                 >
                   {deg}°
                 </button>
@@ -216,7 +216,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               <button
                 type="button"
                 onClick={resetRotations}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
               >
                 초기화
               </button>
@@ -230,9 +230,9 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               return (
                 <li
                   key={idx}
-                  className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
+                  className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm"
                 >
-                  <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-slate-100">
+                  <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-zinc-100">
                     {thumb ? (
                       <div className="flex h-full w-full items-center justify-center p-2">
                         <div
@@ -248,7 +248,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex h-full w-full animate-pulse items-center justify-center bg-slate-200 text-xs text-slate-400">
+                      <div className="flex h-full w-full animate-pulse items-center justify-center bg-zinc-200 text-xs text-zinc-400">
                         불러오는 중...
                       </div>
                     )}
@@ -256,20 +256,20 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
                       {idx + 1}
                     </span>
                     {rot !== 0 ? (
-                      <span className="absolute right-1.5 top-1.5 rounded bg-indigo-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      <span className="absolute right-1.5 top-1.5 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                         {rot}°
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
-                    <span className="text-xs font-medium text-slate-600">
+                  <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-3 py-2">
+                    <span className="text-xs font-medium text-zinc-600">
                       회전: {rot}°
                     </span>
                     <button
                       type="button"
                       onClick={() => rotateOne(idx)}
                       title="90° 회전"
-                      className="rounded-md px-2 py-1 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                      className="rounded-lg px-2 py-1 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
                     >
                       ↻ 90°
                     </button>
@@ -284,7 +284,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               type="button"
               onClick={handleDownload}
               disabled={processing || !dirty}
-              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
               {processing
                 ? '생성 중...'

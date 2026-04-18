@@ -22,8 +22,8 @@ export default function PdfImageConverter({
   const [sub, setSub] = useState<SubTab>('pdf-to-image');
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="inline-flex w-full max-w-md rounded-full bg-slate-100 p-1 sm:w-auto">
+    <div className="flex flex-col gap-6">
+      <div className="inline-flex w-full max-w-md rounded-full border border-zinc-200/90 bg-zinc-100/80 p-1 sm:w-auto">
         {SUBTABS.map((t) => {
           const active = t.id === sub;
           return (
@@ -32,10 +32,10 @@ export default function PdfImageConverter({
               type="button"
               onClick={() => setSub(t.id)}
               className={[
-                'flex-1 rounded-full px-4 py-2 text-sm font-medium transition-colors sm:flex-none',
+                'flex-1 rounded-full px-5 py-2.5 text-sm font-medium transition-all sm:flex-none',
                 active
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900',
+                  ? 'bg-zinc-900 text-white shadow-sm shadow-zinc-900/20'
+                  : 'text-zinc-500 hover:text-zinc-900',
               ].join(' ')}
             >
               {t.label}

@@ -19,7 +19,7 @@ export default function RootLayout({
           content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self';"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">
+      <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-900">
         {children}
       </body>
     </html>

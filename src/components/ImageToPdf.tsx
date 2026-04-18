@@ -129,8 +129,8 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
       {items.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-600">
-              <span className="font-semibold text-slate-800">
+            <p className="text-sm text-zinc-600">
+              <span className="font-semibold text-zinc-800">
                 {items.length}
               </span>
               개 이미지 · 드래그로 순서 변경
@@ -138,7 +138,7 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
             <button
               type="button"
               onClick={clearAll}
-              className="text-sm font-medium text-slate-500 hover:text-rose-600"
+              className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
             >
               전체 삭제
             </button>
@@ -148,9 +148,9 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
             {items.map((item, idx) => (
               <li
                 key={item.id}
-                className="relative overflow-hidden rounded-md border border-slate-200 bg-white"
+                className="relative overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-sm"
               >
-                <div className="aspect-square bg-slate-100">
+                <div className="aspect-square bg-zinc-100">
                   {previews[item.id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -180,7 +180,7 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
           type="button"
           onClick={handleConvert}
           disabled={items.length === 0 || converting}
-          className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
         >
           {converting ? '변환 중...' : 'PDF로 변환'}
         </button>
