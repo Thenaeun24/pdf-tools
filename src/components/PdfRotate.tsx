@@ -169,34 +169,28 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
           description="업로드된 파일은 브라우저에서만 처리됩니다."
         />
       ) : (
-        <div className="panel-premium flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-base shadow-lg shadow-violet-500/30"
-            >
-              ↻
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {file.name}
-              </p>
-              <p className="text-xs font-medium text-slate-500">
-                {formatFileSize(file.size)}
-                <span className="mx-1 text-slate-300">·</span>
-                {pageCount == null ? (
-                  <span className="text-slate-400">페이지 계산 중...</span>
-                ) : pageCount < 0 ? (
-                  <span className="font-semibold text-rose-600">읽기 실패</span>
-                ) : (
-                  <span className="font-semibold text-indigo-600">
-                    {pageCount}페이지
-                  </span>
-                )}
-              </p>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm shadow-zinc-900/5">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-zinc-800">
+              {file.name}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {formatFileSize(file.size)}
+              {' · '}
+              {pageCount == null ? (
+                <span className="text-zinc-400">페이지 계산 중...</span>
+              ) : pageCount < 0 ? (
+                <span className="text-rose-600">읽기 실패</span>
+              ) : (
+                <span>{pageCount}페이지</span>
+              )}
+            </p>
           </div>
-          <button type="button" onClick={reset} className="btn-ghost">
+          <button
+            type="button"
+            onClick={reset}
+            className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
+          >
             다른 파일 선택
           </button>
         </div>
@@ -204,10 +198,9 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
 
       {file && pageCount != null && pageCount > 0 ? (
         <>
-          <div className="panel-premium flex flex-col gap-3 p-5">
-            <p className="flex items-center gap-2 text-sm font-bold text-slate-800">
-              <span aria-hidden>🔁</span>
-              <span className="gradient-text">전체 일괄 회전</span>
+          <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-sm shadow-zinc-900/5">
+            <p className="text-sm font-semibold text-zinc-800">
+              전체 일괄 회전
             </p>
             <div className="flex flex-wrap gap-2">
               {[90, 180, 270].map((deg) => (
@@ -215,7 +208,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
                   key={deg}
                   type="button"
                   onClick={() => setAllRotation(deg)}
-                  className="rounded-xl border border-indigo-200 bg-white/80 px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm shadow-indigo-500/10 transition-all hover:-translate-y-0.5 hover:border-violet-400 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-fuchsia-50 hover:text-indigo-900"
+                  className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
                 >
                   {deg}°
                 </button>
@@ -223,7 +216,7 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               <button
                 type="button"
                 onClick={resetRotations}
-                className="rounded-xl border border-slate-200 bg-white/80 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
+                className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
               >
                 초기화
               </button>
@@ -237,9 +230,9 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               return (
                 <li
                   key={idx}
-                  className="panel-premium flex flex-col overflow-hidden p-0 transition-transform hover:-translate-y-0.5"
+                  className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm"
                 >
-                  <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden rounded-t-[1.25rem] bg-gradient-to-br from-slate-100 to-indigo-50">
+                  <div className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-zinc-100">
                     {thumb ? (
                       <div className="flex h-full w-full items-center justify-center p-2">
                         <div
@@ -255,28 +248,28 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex h-full w-full animate-pulse items-center justify-center bg-gradient-to-br from-indigo-100 to-fuchsia-100 text-xs font-medium text-indigo-400">
+                      <div className="flex h-full w-full animate-pulse items-center justify-center bg-zinc-200 text-xs text-zinc-400">
                         불러오는 중...
                       </div>
                     )}
-                    <span className="brand-gradient absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-white shadow-md shadow-violet-500/40">
+                    <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold text-white">
                       {idx + 1}
                     </span>
                     {rot !== 0 ? (
-                      <span className="absolute right-1.5 top-1.5 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur">
+                      <span className="absolute right-1.5 top-1.5 rounded bg-zinc-800/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                         {rot}°
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-white/80 bg-white/40 px-3 py-2 backdrop-blur">
-                    <span className="text-xs font-semibold text-slate-600">
-                      회전: <span className="text-indigo-600">{rot}°</span>
+                  <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-3 py-2">
+                    <span className="text-xs font-medium text-zinc-600">
+                      회전: {rot}°
                     </span>
                     <button
                       type="button"
                       onClick={() => rotateOne(idx)}
                       title="90° 회전"
-                      className="rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-800"
+                      className="rounded-lg px-2 py-1 text-sm font-semibold text-zinc-800 hover:bg-zinc-100"
                     >
                       ↻ 90°
                     </button>
@@ -291,12 +284,12 @@ export default function PdfRotate({ addToast }: PdfRotateProps) {
               type="button"
               onClick={handleDownload}
               disabled={processing || !dirty}
-              className="btn-primary focus-ring"
+              className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
               {processing
-                ? '✨ 생성 중...'
+                ? '생성 중...'
                 : dirty
-                  ? '⬇ 회전 적용 PDF 다운로드'
+                  ? '회전 적용 PDF 다운로드'
                   : '회전할 페이지를 선택하세요'}
             </button>
           </div>

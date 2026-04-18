@@ -53,10 +53,10 @@ function SortableRow({
       ref={setNodeRef}
       style={style}
       className={[
-        'panel-soft flex items-center gap-3 px-3 py-2.5 transition-all',
+        'flex items-center gap-3 rounded-2xl border border-zinc-200/90 bg-white px-3 py-2.5 shadow-sm',
         isDragging
-          ? 'border-violet-400 shadow-xl shadow-violet-500/20'
-          : 'hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-500/10',
+          ? 'border-zinc-400 shadow-lg shadow-zinc-900/10'
+          : 'border-zinc-200 hover:border-zinc-300',
       ].join(' ')}
     >
       <button
@@ -64,23 +64,21 @@ function SortableRow({
         {...attributes}
         {...listeners}
         aria-label="드래그로 순서 변경"
-        className="flex h-8 w-6 flex-none cursor-grab items-center justify-center text-slate-400 transition-colors hover:text-indigo-600 active:cursor-grabbing"
+        className="flex h-8 w-6 flex-none cursor-grab items-center justify-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
       >
         ☰
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-slate-800">
+        <p className="truncate text-sm font-medium text-zinc-800">
           {item.name}
         </p>
-        <p className="text-xs font-medium text-slate-500">
-          {formatFileSize(item.size)}
-        </p>
+        <p className="text-xs text-zinc-500">{formatFileSize(item.size)}</p>
       </div>
       <button
         type="button"
         onClick={() => onRemove(item.id)}
         aria-label={`${item.name} 삭제`}
-        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800"
       >
         ✕
       </button>

@@ -129,36 +129,38 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
       {items.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-600">
-              <span className="gradient-text text-base font-bold">
+            <p className="text-sm text-zinc-600">
+              <span className="font-semibold text-zinc-800">
                 {items.length}
               </span>
-              <span className="ml-1 font-semibold">개 이미지</span>
-              <span className="mx-1.5 text-slate-300">·</span>
-              <span className="text-xs text-slate-500">드래그로 순서 변경</span>
+              개 이미지 · 드래그로 순서 변경
             </p>
-            <button type="button" onClick={clearAll} className="btn-ghost">
-              🗑 전체 삭제
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-sm font-medium text-zinc-500 hover:text-zinc-800"
+            >
+              전체 삭제
             </button>
           </div>
 
-          <ul className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6">
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
             {items.map((item, idx) => (
               <li
                 key={item.id}
-                className="panel-premium group relative overflow-hidden p-0 transition-transform hover:-translate-y-0.5"
+                className="relative overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-sm"
               >
-                <div className="aspect-square overflow-hidden rounded-[1.125rem] bg-gradient-to-br from-slate-100 to-indigo-50">
+                <div className="aspect-square bg-zinc-100">
                   {previews[item.id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={previews[item.id]}
                       alt={item.name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
+                      className="h-full w-full object-cover"
                     />
                   ) : null}
                 </div>
-                <span className="brand-gradient absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white shadow-md shadow-violet-500/30">
+                <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                   {idx + 1}
                 </span>
               </li>
@@ -178,9 +180,9 @@ export default function ImageToPdf({ addToast }: ImageToPdfProps) {
           type="button"
           onClick={handleConvert}
           disabled={items.length === 0 || converting}
-          className="btn-primary focus-ring"
+          className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
         >
-          {converting ? '✨ 변환 중...' : '✨ PDF로 변환'}
+          {converting ? '변환 중...' : 'PDF로 변환'}
         </button>
       </div>
 

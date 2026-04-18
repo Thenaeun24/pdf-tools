@@ -17,19 +17,19 @@ export default function ProgressBar({
 
   return (
     <div className="w-full">
-      <div className="mb-1.5 flex items-center justify-between text-xs">
-        <span className="font-medium text-slate-500">{label ?? '진행 중'}</span>
-        <span className="gradient-text font-bold tabular-nums">{clamped}%</span>
+      <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
+        <span>{label ?? '진행 중'}</span>
+        <span className="font-semibold tabular-nums text-zinc-800">{clamped}%</span>
       </div>
       <div
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={clamped}
-        className="h-2.5 w-full overflow-hidden rounded-full border border-white/80 bg-slate-200/60 shadow-inner shadow-slate-900/5"
+        className="h-2 w-full overflow-hidden rounded-full bg-zinc-200"
       >
         <div
-          className="brand-gradient animate-gradient animate-shimmer relative h-full rounded-full transition-[width] duration-300 ease-out"
+          className="h-full rounded-full bg-zinc-800 transition-[width] duration-200 ease-out"
           style={{ width: `${clamped}%` }}
         />
       </div>

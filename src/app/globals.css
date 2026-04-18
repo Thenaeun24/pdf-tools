@@ -1,12 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --brand-1: #6366f1; /* indigo-500 */
-  --brand-2: #8b5cf6; /* violet-500 */
-  --brand-3: #d946ef; /* fuchsia-500 */
-  --brand-4: #ec4899; /* pink-500 */
+  --background: #fafafa;
+  --foreground: #18181b;
 }
 
 html,
@@ -15,55 +11,34 @@ body {
 }
 
 body {
+  background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', 'Pretendard',
-    sans-serif;
-  background: radial-gradient(
-      1100px 560px at 10% -10%,
-      rgba(129, 140, 248, 0.22),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 500px at 110% 10%,
-      rgba(217, 70, 239, 0.18),
-      transparent 60%
-    ),
-    radial-gradient(
-      1000px 700px at 50% 120%,
-      rgba(56, 189, 248, 0.18),
-      transparent 65%
-    ),
-    linear-gradient(180deg, #f8fafc 0%, #eef2ff 40%, #faf5ff 100%);
-  background-attachment: fixed;
-  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
 }
 
-/* ---------------------------------------------------------- */
-/*                         스크롤바                             */
-/* ---------------------------------------------------------- */
+/* 얇은 스크롤바 (Webkit) */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #c7d2fe, #f5d0fe);
+  background-color: #d4d4d8;
   border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #a5b4fc, #f0abfc);
-  background-clip: padding-box;
+  background-color: #a1a1aa;
 }
 
+/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #c4b5fd transparent;
+  scrollbar-color: #d4d4d8 transparent;
 }
 
+/* 탭 가로 스크롤 등에서 스크롤바 숨김 */
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -72,248 +47,17 @@ body {
   display: none;
 }
 
-/* ---------------------------------------------------------- */
-/*                        애니메이션                            */
-/* ---------------------------------------------------------- */
-
+/* Toast 슬라이드 인 */
 @keyframes toast-slide-in {
   from {
     opacity: 0;
-    transform: translateX(120%) scale(0.98);
+    transform: translateX(120%);
   }
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
   }
 }
 .animate-toast-in {
-  animation: toast-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes gradient-shift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient-shift 8s ease infinite;
-}
-
-@keyframes float-blob {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  33% {
-    transform: translate3d(16px, -18px, 0) scale(1.04);
-  }
-  66% {
-    transform: translate3d(-14px, 14px, 0) scale(0.97);
-  }
-}
-.animate-float {
-  animation: float-blob 14s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(220%);
-  }
-}
-.animate-shimmer::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.55) 40%,
-    rgba(255, 255, 255, 0.85) 50%,
-    rgba(255, 255, 255, 0.55) 60%,
-    transparent 100%
-  );
-  animation: shimmer 1.6s linear infinite;
-}
-
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.55);
-  }
-  80%,
-  100% {
-    box-shadow: 0 0 0 18px rgba(139, 92, 246, 0);
-  }
-}
-.animate-pulse-ring {
-  animation: pulse-ring 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
-/* ---------------------------------------------------------- */
-/*                     유틸리티 / 토큰                          */
-/* ---------------------------------------------------------- */
-
-.gradient-text {
-  background: linear-gradient(
-    110deg,
-    #4f46e5 0%,
-    #8b5cf6 45%,
-    #d946ef 75%,
-    #ec4899 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-.brand-gradient {
-  background-image: linear-gradient(
-    110deg,
-    var(--brand-1) 0%,
-    var(--brand-2) 45%,
-    var(--brand-3) 80%,
-    var(--brand-4) 100%
-  );
-}
-
-/* 프리미엄 카드 (유리질감) */
-.panel-premium {
-  position: relative;
-  border-radius: 1.25rem;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.78) 100%
-  );
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 10px 30px -12px rgba(79, 70, 229, 0.18),
-    0 4px 12px -4px rgba(217, 70, 239, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.panel-soft {
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 6px 18px -10px rgba(79, 70, 229, 0.18);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-/* 프라이머리 버튼 (브랜드 그라디언트) */
-.btn-primary {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 0.85rem;
-  padding: 0.7rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 0.01em;
-  background-image: linear-gradient(
-    110deg,
-    #4f46e5 0%,
-    #7c3aed 45%,
-    #c026d3 85%,
-    #db2777 100%
-  );
-  background-size: 200% 200%;
-  background-position: 0% 50%;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.25) inset,
-    0 10px 24px -10px rgba(124, 58, 237, 0.55),
-    0 6px 14px -8px rgba(219, 39, 119, 0.35);
-  transition:
-    background-position 0.5s ease,
-    transform 0.15s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease;
-}
-.btn-primary:hover:not(:disabled) {
-  background-position: 100% 50%;
-  transform: translateY(-1px);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.3) inset,
-    0 16px 32px -12px rgba(124, 58, 237, 0.65),
-    0 8px 18px -8px rgba(219, 39, 119, 0.45);
-}
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-  filter: brightness(0.97);
-}
-.btn-primary:disabled {
-  background-image: linear-gradient(110deg, #cbd5e1 0%, #e2e8f0 100%);
-  color: #94a3b8;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-/* 세컨더리 버튼 (유리) */
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  border-radius: 0.85rem;
-  padding: 0.65rem 1.1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #4338ca;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(199, 210, 254, 0.8);
-  box-shadow: 0 4px 10px -6px rgba(79, 70, 229, 0.18);
-  transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.15s ease;
-  backdrop-filter: blur(8px);
-}
-.btn-secondary:hover:not(:disabled) {
-  background: rgba(238, 242, 255, 0.95);
-  border-color: #a5b4fc;
-  color: #3730a3;
-  transform: translateY(-1px);
-}
-.btn-secondary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* 고스트 링크 버튼 */
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #64748b;
-  transition: color 0.15s ease;
-}
-.btn-ghost:hover {
-  color: #4f46e5;
-}
-
-/* 링 포커스 */
-.focus-ring:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 2px #fff,
-    0 0 0 4px rgba(139, 92, 246, 0.55);
+  animation: toast-slide-in 0.22s ease-out both;
 }
