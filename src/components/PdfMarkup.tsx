@@ -38,7 +38,9 @@ interface PdfMarkupProps {
 /* -------------------------------------------------------------------------- */
 
 const BACKING_SCALE = 2; // Canvas 내부 해상도 2x
-const HIGHLIGHT_OPACITY = 0.35;
+// 실제 형광펜 느낌: multiply 합성 + 0.4 알파 → 글자는 비치고, 스트로크가 겹치면 진해진다.
+const HIGHLIGHT_OPACITY = 0.4;
+const HIGHLIGHT_COMPOSITE: GlobalCompositeOperation = 'multiply';
 const MIN_CSS_WIDTH = 280;
 const MAX_CSS_WIDTH = 960;
 
@@ -85,6 +87,12 @@ function getCanvasCoords(
   };
 }
 
+/**
+ * 자유곡선 형광펜.
+ * - 연속된 두 점의 중점을 Quadratic Bezier 의 끝점으로, 현재 점을 control point 로 삼아
+ *   꺾임 없이 부드러운 곡선을 그린다.
+ * - multiply 합성 + alpha 로 실제 형광펜 느낌을 재현한다.
+ */
 function strokeFree(
   ctx: CanvasRenderingContext2D,
   points: { x: number; y: number }[],
@@ -93,19 +101,36 @@ function strokeFree(
   color: string,
   lineWidthNorm: number,
   opacity: number,
+  composite: GlobalCompositeOperation = HIGHLIGHT_COMPOSITE,
 ) {
   if (points.length < 2) return;
   ctx.save();
+  ctx.globalCompositeOperation = composite;
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidthNorm * canvasW;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(points[0].x * canvasW, points[0].y * canvasH);
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i].x * canvasW, points[i].y * canvasH);
+
+  const first = points[0];
+  ctx.moveTo(first.x * canvasW, first.y * canvasH);
+
+  if (points.length === 2) {
+    const last = points[1];
+    ctx.lineTo(last.x * canvasW, last.y * canvasH);
+  } else {
+    for (let i = 1; i < points.length - 1; i++) {
+      const cur = points[i];
+      const next = points[i + 1];
+      const midX = ((cur.x + next.x) / 2) * canvasW;
+      const midY = ((cur.y + next.y) / 2) * canvasH;
+      ctx.quadraticCurveTo(cur.x * canvasW, cur.y * canvasH, midX, midY);
+    }
+    const last = points[points.length - 1];
+    ctx.lineTo(last.x * canvasW, last.y * canvasH);
   }
+
   ctx.stroke();
   ctx.restore();
 }
@@ -119,8 +144,10 @@ function strokeLine(
   color: string,
   lineWidthNorm: number,
   opacity: number,
+  composite: GlobalCompositeOperation = HIGHLIGHT_COMPOSITE,
 ) {
   ctx.save();
+  ctx.globalCompositeOperation = composite;
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidthNorm * canvasW;
@@ -265,6 +292,12 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     { minX: number; minY: number; maxX: number; maxY: number } | null
   >(null);
   const shiftDownRef = useRef(false);
+
+  // 프리뷰 드로잉을 requestAnimationFrame 에 맞춰 한 프레임당 최대 1회로 코얼레싱.
+  // 빠른 포인터 이동 시 중간 좌표는 freePointsRef / latestMoveRef 에만 쌓고,
+  // 실제 canvas redraw 는 RAF 콜백에서 수행해 드로잉 렉을 방지한다.
+  const rafIdRef = useRef<number | null>(null);
+  const latestMoveRef = useRef<{ x: number; y: number } | null>(null);
 
   // 모자이크 이미지 캐시 (리드로잉 시 재사용)
   const mosaicImgCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -743,6 +776,112 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     ],
   );
 
+  /**
+   * 프리뷰 드로잉 (자유곡선 / 직선 / 네모박스) 을 한 프레임에 한 번만 수행한다.
+   * 매 포인터 이벤트마다 canvas 를 건드리지 않고, RAF 콜백에서 최신 상태를 한 번만 읽어 그린다.
+   */
+  const renderPreviewFrame = useCallback(() => {
+    rafIdRef.current = null;
+    const canvas = drawCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    switch (tool) {
+      case 'highlight-free': {
+        if (!isPointerDownRef.current) return;
+        // 전체 스트로크를 매 프레임마다 다시 그려야 multiply 합성 시
+        // 인접 세그먼트의 라운드 캡이 누적되며 생기는 진한 경계를 피할 수 있다.
+        redrawCurrentPage();
+        const pts = freePointsRef.current;
+        if (pts.length >= 2) {
+          strokeFree(
+            ctx,
+            pts,
+            canvas.width,
+            canvas.height,
+            hlColor,
+            (hlWidth * BACKING_SCALE) / canvas.width,
+            HIGHLIGHT_OPACITY,
+          );
+        }
+        break;
+      }
+      case 'highlight-line': {
+        const move = latestMoveRef.current;
+        if (!lineStart || !move) return;
+        const endY = shiftDownRef.current ? lineStart.y : move.y;
+        redrawCurrentPage();
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = hlColor;
+        ctx.lineWidth = hlWidth * BACKING_SCALE;
+        ctx.beginPath();
+        ctx.moveTo(lineStart.x * canvas.width, lineStart.y * canvas.height);
+        ctx.lineTo(move.x * canvas.width, endY * canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = hlColor;
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(
+          lineStart.x * canvas.width,
+          lineStart.y * canvas.height,
+          4 * BACKING_SCALE,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'rectangle': {
+        const start = rectStartRef.current;
+        const move = latestMoveRef.current;
+        if (!isPointerDownRef.current || !start || !move) return;
+        redrawCurrentPage();
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = rectColor;
+        ctx.lineWidth = rectWidth * BACKING_SCALE;
+        ctx.strokeRect(
+          start.x * canvas.width,
+          start.y * canvas.height,
+          (move.x - start.x) * canvas.width,
+          (move.y - start.y) * canvas.height,
+        );
+        ctx.restore();
+        break;
+      }
+      default:
+        break;
+    }
+  }, [
+    tool,
+    lineStart,
+    hlColor,
+    hlWidth,
+    rectColor,
+    rectWidth,
+    redrawCurrentPage,
+  ]);
+
+  const schedulePreview = useCallback(() => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(renderPreviewFrame);
+  }, [renderPreviewFrame]);
+
+  // 언마운트 / 페이지 전환 시 예약된 프레임 취소.
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, []);
+
   const handlePointerMove = useCallback(
     (e: ReactMouseEvent | ReactTouchEvent) => {
       if (!file) return;
@@ -756,100 +895,32 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       switch (tool) {
         case 'highlight-free': {
           if (!isPointerDownRef.current) return;
-          const pts = freePointsRef.current;
-          const last = pts[pts.length - 1];
-          pts.push({ x: nx, y: ny });
-          // 증분 드로잉 (이전 점 → 현재 점)
-          const ctx = canvas.getContext('2d');
-          if (ctx && last) {
-            ctx.save();
-            ctx.globalAlpha = HIGHLIGHT_OPACITY;
-            ctx.strokeStyle = hlColor;
-            ctx.lineWidth = hlWidth * BACKING_SCALE;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.beginPath();
-            ctx.moveTo(last.x * canvas.width, last.y * canvas.height);
-            ctx.lineTo(nx * canvas.width, ny * canvas.height);
-            ctx.stroke();
-            ctx.restore();
-          }
+          freePointsRef.current.push({ x: nx, y: ny });
+          schedulePreview();
           break;
         }
         case 'highlight-line': {
           if (!lineStart) return;
-          const endY = shiftDownRef.current ? lineStart.y : ny;
-          // redraw + 미리보기 점선
-          redrawCurrentPage();
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.save();
-            ctx.setLineDash([5, 5]);
-            ctx.globalAlpha = 0.7;
-            ctx.strokeStyle = hlColor;
-            ctx.lineWidth = hlWidth * BACKING_SCALE;
-            ctx.beginPath();
-            ctx.moveTo(lineStart.x * canvas.width, lineStart.y * canvas.height);
-            ctx.lineTo(nx * canvas.width, endY * canvas.height);
-            ctx.stroke();
-            // 시작점 표시 (작은 원)
-            ctx.setLineDash([]);
-            ctx.fillStyle = hlColor;
-            ctx.globalAlpha = 1;
-            ctx.beginPath();
-            ctx.arc(
-              lineStart.x * canvas.width,
-              lineStart.y * canvas.height,
-              4 * BACKING_SCALE,
-              0,
-              Math.PI * 2,
-            );
-            ctx.fill();
-            ctx.restore();
-          }
+          latestMoveRef.current = { x: nx, y: ny };
+          schedulePreview();
           break;
         }
         case 'rectangle': {
           if (!isPointerDownRef.current) return;
-          const start = rectStartRef.current;
-          if (!start) return;
-          const w = nx - start.x;
-          const h = ny - start.y;
-          redrawCurrentPage();
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.save();
-            ctx.setLineDash([5, 5]);
-            ctx.strokeStyle = rectColor;
-            ctx.lineWidth = rectWidth * BACKING_SCALE;
-            ctx.strokeRect(
-              start.x * canvas.width,
-              start.y * canvas.height,
-              w * canvas.width,
-              h * canvas.height,
-            );
-            ctx.restore();
-          }
+          if (!rectStartRef.current) return;
+          latestMoveRef.current = { x: nx, y: ny };
+          schedulePreview();
           break;
         }
         case 'mosaic': {
           if (!isPointerDownRef.current) return;
+          // 모자이크는 픽셀 샘플링이라 프레임 단위 스로틀보다 "그리는 순간" 정확도가 중요.
           applyMosaicAt(x, y);
           break;
         }
       }
     },
-    [
-      file,
-      tool,
-      lineStart,
-      hlColor,
-      hlWidth,
-      rectColor,
-      rectWidth,
-      redrawCurrentPage,
-      applyMosaicAt,
-    ],
+    [file, tool, lineStart, schedulePreview, applyMosaicAt],
   );
 
   const handlePointerUp = useCallback(
@@ -858,6 +929,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       if ('touches' in e) e.preventDefault();
       const canvas = drawCanvasRef.current;
       if (!canvas) return;
+
+      // 보류 중인 프리뷰 프레임 취소 (최종 액션을 저장한 뒤 redraw 로 갱신됨).
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      latestMoveRef.current = null;
 
       switch (tool) {
         case 'highlight-free': {
@@ -1062,6 +1140,11 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       freePointsRef.current = [];
       rectStartRef.current = null;
       mosaicBoundsRef.current = null;
+      latestMoveRef.current = null;
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       setPageNum(next);
     },
     [totalPages],
@@ -1117,33 +1200,33 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:gap-4">
+    <div className="flex flex-col gap-5 rounded-[2rem] bg-gradient-to-br from-amber-50 via-rose-50 to-violet-100/60 p-4 md:flex-row md:gap-6 md:p-6">
       {/* ---------------- 도구 패널 (사이드바/상단 툴바) ---------------- */}
-      <aside className="flex flex-col gap-3 md:w-60 md:flex-none">
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <aside className="flex flex-col gap-4 md:w-72 md:flex-none">
+        <div className="flex items-center justify-between gap-3 rounded-3xl border border-white/70 bg-white/70 px-5 py-4 shadow-lg shadow-violet-200/40 backdrop-blur-md">
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-slate-700">
+            <p className="truncate text-sm font-semibold text-slate-700">
               {file.name}
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="mt-0.5 text-xs font-medium text-violet-400">
               {totalPages}페이지
             </p>
           </div>
           <button
             type="button"
             onClick={resetAll}
-            className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+            className="shrink-0 rounded-2xl border border-rose-100 bg-white/80 px-3 py-1.5 text-xs font-semibold text-rose-400 shadow-sm shadow-rose-100/60 transition-all hover:-translate-y-0.5 hover:bg-rose-100/70 hover:text-rose-500 hover:shadow-md"
           >
             다른 파일 열기
           </button>
         </div>
 
         {/* 도구 선택 */}
-        <div className="rounded-lg border border-slate-200 bg-white p-2">
-          <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            도구
+        <div className="rounded-3xl border border-white/70 bg-white/70 p-4 shadow-lg shadow-indigo-100/50 backdrop-blur-md">
+          <p className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-400">
+            ✿ 도구
           </p>
-          <div className="hide-scrollbar flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+          <div className="hide-scrollbar flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
             {TOOLS.map((t) => {
               const active = t.id === tool;
               return (
@@ -1157,13 +1240,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
                   }}
                   title={t.label}
                   className={[
-                    'flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    'flex shrink-0 items-center gap-2.5 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all duration-200',
                     active
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-700 hover:bg-slate-100',
+                      ? 'scale-[1.02] bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 text-white shadow-lg shadow-fuchsia-200/60'
+                      : 'bg-white/60 text-slate-600 hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-600 hover:shadow-md hover:shadow-violet-100',
                   ].join(' ')}
                 >
-                  <span aria-hidden>{t.icon}</span>
+                  <span aria-hidden className="text-base">{t.icon}</span>
                   <span className="whitespace-nowrap">{t.label}</span>
                 </button>
               );
@@ -1172,9 +1255,9 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 옵션 영역 */}
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            옵션
+        <div className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-lg shadow-emerald-100/40 backdrop-blur-md">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-500">
+            ❋ 옵션
           </p>
           {tool === 'highlight-free' || tool === 'highlight-line' ? (
             <div className="flex flex-col gap-3">
@@ -1258,13 +1341,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           ) : null}
 
           {tool === 'none' ? (
-            <p className="text-xs text-slate-500">
+            <p className="rounded-2xl bg-violet-50/80 px-3 py-2.5 text-xs font-medium text-violet-400">
               도구를 선택하면 옵션이 나타납니다.
             </p>
           ) : null}
 
           {tool === 'highlight-line' && lineStart ? (
-            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+            <p className="mt-4 rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-yellow-50 px-3.5 py-2.5 text-[11px] font-medium text-amber-700 shadow-sm shadow-amber-100">
               시작점이 찍혔습니다. 끝점을 클릭하세요. (Shift: 수평 고정)
             </p>
           ) : null}
@@ -1275,7 +1358,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 액션 */}
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-2">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-3xl border border-white/70 bg-white/70 p-3 shadow-lg shadow-pink-100/40 backdrop-blur-md">
           <ActionBtn
             onClick={handleUndo}
             disabled={!canUndo}
@@ -1305,9 +1388,12 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="w-full rounded-md bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="group relative w-full overflow-hidden rounded-3xl bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 px-6 py-4 text-sm font-bold tracking-wide text-white shadow-xl shadow-fuchsia-200/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-fuchsia-300/70 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
         >
-          {saving ? '저장 중...' : '💾 마크업 PDF 저장'}
+          <span className="relative z-10">
+            {saving ? '저장 중...' : '💾 마크업 PDF 저장'}
+          </span>
+          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
         </button>
         {saving || saveProgress > 0 ? (
           <ProgressBar
@@ -1318,26 +1404,29 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       </aside>
 
       {/* ---------------- 캔버스 영역 ---------------- */}
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
         <div
           ref={containerRef}
-          className="relative mx-auto w-full max-w-[960px] select-none rounded-lg bg-slate-200/60 p-2"
+          className="relative mx-auto w-full max-w-[960px] select-none rounded-[2rem] border border-white/80 bg-white/60 p-5 shadow-xl shadow-indigo-100/50 backdrop-blur-md"
         >
           {loading || rendering ? (
-            <div className="flex items-center justify-center py-10 text-sm text-slate-500">
-              불러오는 중...
+            <div className="flex items-center justify-center gap-2 py-10 text-sm font-medium text-violet-400">
+              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-violet-300 [animation-delay:-0.3s]" />
+              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-fuchsia-300 [animation-delay:-0.15s]" />
+              <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-pink-300" />
+              <span className="ml-2">불러오는 중...</span>
             </div>
           ) : null}
 
-          <div className="relative mx-auto">
+          <div className="relative mx-auto overflow-hidden rounded-2xl">
             <canvas
               ref={bgCanvasRef}
-              className="block h-auto w-full rounded-sm bg-white shadow-sm"
+              className="block h-auto w-full rounded-2xl bg-white shadow-md shadow-slate-200/50"
               style={{ zIndex: 1 }}
             />
             <canvas
               ref={drawCanvasRef}
-              className="absolute inset-0 h-full w-full rounded-sm"
+              className="absolute inset-0 h-full w-full rounded-2xl"
               style={{
                 zIndex: 2,
                 cursor:
@@ -1388,11 +1477,15 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
                   color: textColor,
                   fontSize: textSize,
                   lineHeight: 1.2,
-                  background: 'rgba(255,255,255,0.95)',
-                  border: '1.5px solid #6366f1',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  minWidth: 120,
+                  background: 'rgba(255,255,255,0.92)',
+                  border: '1.5px solid #c4b5fd',
+                  borderRadius: 14,
+                  padding: '6px 12px',
+                  minWidth: 140,
+                  boxShadow:
+                    '0 8px 24px -4px rgba(167, 139, 250, 0.35), 0 0 0 4px rgba(221, 214, 254, 0.45)',
+                  backdropFilter: 'blur(4px)',
+                  outline: 'none',
                   fontFamily:
                     "-apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif",
                 }}
@@ -1402,25 +1495,25 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         </div>
 
         {/* 페이지 네비게이션 */}
-        <div className="flex items-center justify-center gap-3">
+        <div className="mx-auto flex items-center justify-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-2 shadow-lg shadow-violet-100/50 backdrop-blur-md">
           <button
             type="button"
             onClick={() => gotoPage(pageNum - 1)}
             disabled={pageNum <= 1 || rendering}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-violet-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-violet-100 hover:to-fuchsia-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
           >
             ◀ 이전
           </button>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold text-indigo-700">{pageNum}</span>
-            {' / '}
-            <span>{totalPages}</span>
+          <p className="px-3 text-sm font-medium text-slate-500">
+            <span className="rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-base font-extrabold text-transparent">{pageNum}</span>
+            <span className="mx-1.5 text-slate-300">/</span>
+            <span className="font-semibold text-slate-600">{totalPages}</span>
           </p>
           <button
             type="button"
             onClick={() => gotoPage(pageNum + 1)}
             disabled={pageNum >= totalPages || rendering}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-violet-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-violet-100 hover:to-fuchsia-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
           >
             다음 ▶
           </button>
@@ -1442,9 +1535,9 @@ function OptionRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-semibold text-slate-500">{label}</span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
+    <div className="flex flex-col gap-2">
+      <span className="text-[11px] font-bold tracking-wider text-slate-500">{label}</span>
+      <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }
@@ -1468,10 +1561,10 @@ function ColorSwatches({
           aria-label={`색상 ${c}`}
           style={{ background: c }}
           className={[
-            'h-7 w-7 rounded-full border transition-all',
+            'h-8 w-8 rounded-full border-2 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-110',
             value === c
-              ? 'border-indigo-600 ring-2 ring-indigo-300'
-              : 'border-slate-300',
+              ? 'scale-110 border-white ring-2 ring-violet-400 ring-offset-2 ring-offset-white/40'
+              : 'border-white/80 hover:ring-2 hover:ring-violet-200',
           ].join(' ')}
         />
       ))}
@@ -1500,10 +1593,10 @@ function SizeButtons<T extends number>({
             type="button"
             onClick={() => onChange(v)}
             className={[
-              'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+              'rounded-2xl px-3.5 py-1.5 text-xs font-semibold transition-all duration-200',
               active
-                ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400',
+                ? 'bg-gradient-to-r from-violet-400 to-fuchsia-400 text-white shadow-md shadow-fuchsia-200/60'
+                : 'bg-white/70 text-slate-500 shadow-sm hover:-translate-y-0.5 hover:bg-violet-50 hover:text-violet-500 hover:shadow-md',
             ].join(' ')}
           >
             {labels[i]}
@@ -1531,7 +1624,7 @@ function ActionBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="flex flex-1 items-center justify-center rounded-md px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+      className="flex flex-1 items-center justify-center rounded-2xl bg-white/60 px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-pink-100 hover:to-violet-100 hover:text-violet-600 hover:shadow-md disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-300 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:from-transparent disabled:hover:to-transparent disabled:hover:text-slate-300"
     >
       {label}
     </button>
