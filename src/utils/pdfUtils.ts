@@ -1,4 +1,11 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
+import {
+  BlendMode,
+  LineCapStyle,
+  PDFDocument,
+  StandardFonts,
+  degrees,
+  rgb,
+} from 'pdf-lib';
 import type * as PdfjsLibType from 'pdfjs-dist';
 import type { DrawingAction, ImageFormat, ImageScale } from '@/types';
 
@@ -38,6 +45,45 @@ export interface PdfPageImage {
 /* -------------------------------------------------------------------------- */
 /*                              Internal helpers                              */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * 정규화(0~1) 좌표 배열을 단일 SVG path 문자열로 변환한다.
+ * - Canvas 프리뷰의 strokeFree 와 동일하게 인접한 두 점의 중점을 Quadratic Bezier
+ *   의 끝점으로, 현재 점을 control point 로 삼아 부드러운 곡선을 만든다.
+ * - 한 번의 path 로 그려야 세그먼트 경계마다 round cap 이 중첩되어 생기는
+ *   진한 경계(형광펜 "음영")를 피할 수 있다.
+ */
+function buildSmoothSvgPath(
+  pts: { x: number; y: number }[],
+  pw: number,
+  ph: number,
+): string {
+  if (pts.length < 2) return '';
+  const cmds: string[] = [];
+  const first = pts[0];
+  cmds.push(`M ${(first.x * pw).toFixed(3)} ${(first.y * ph).toFixed(3)}`);
+
+  if (pts.length === 2) {
+    const last = pts[1];
+    cmds.push(`L ${(last.x * pw).toFixed(3)} ${(last.y * ph).toFixed(3)}`);
+    return cmds.join(' ');
+  }
+
+  for (let i = 1; i < pts.length - 1; i++) {
+    const cur = pts[i];
+    const next = pts[i + 1];
+    const midX = ((cur.x + next.x) / 2) * pw;
+    const midY = ((cur.y + next.y) / 2) * ph;
+    cmds.push(
+      `Q ${(cur.x * pw).toFixed(3)} ${(cur.y * ph).toFixed(3)} ${midX.toFixed(
+        3,
+      )} ${midY.toFixed(3)}`,
+    );
+  }
+  const last = pts[pts.length - 1];
+  cmds.push(`L ${(last.x * pw).toFixed(3)} ${(last.y * ph).toFixed(3)}`);
+  return cmds.join(' ');
+}
 
 async function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
   return await file.arrayBuffer();
@@ -550,18 +596,21 @@ export async function applyMarkupToPdf(
           const pts = action.points;
           if (!pts || pts.length < 2) break;
           const thickness = Math.max(0.1, (action.style.lineWidth || 0) * pw);
-          for (let i = 1; i < pts.length; i++) {
-            const a0 = pts[i - 1];
-            const a1 = pts[i];
-            page.drawLine({
-              start: { x: nxToPdfX(a0.x), y: nyToPdfY(a0.y) },
-              end: { x: nxToPdfX(a1.x), y: nyToPdfY(a1.y) },
-              thickness,
-              color,
-              opacity,
-              lineCap: 1, // 1 = round (pdf-lib LineCapStyle)
-            });
-          }
+          // 세그먼트별 drawLine 은 이음매마다 round cap 이 중첩되어 진한 경계가
+          // 생기고, 각 세그먼트가 개별 alpha 로 합성되며 자기 중첩이 누적된다.
+          // 따라서 전체 획을 하나의 SVG path(중점 Quadratic Bezier) 로 그리고,
+          // Multiply 블렌드 + 단일 borderOpacity 로 형광펜 느낌을 살린다.
+          const svgPath = buildSmoothSvgPath(pts, pw, ph);
+          if (!svgPath) break;
+          page.drawSvgPath(svgPath, {
+            x: 0,
+            y: ph,
+            borderColor: color,
+            borderWidth: thickness,
+            borderOpacity: opacity,
+            borderLineCap: LineCapStyle.Round,
+            blendMode: BlendMode.Multiply,
+          });
           break;
         }
 
@@ -576,7 +625,8 @@ export async function applyMarkupToPdf(
             thickness,
             color,
             opacity,
-            lineCap: 1,
+            lineCap: LineCapStyle.Round,
+            blendMode: BlendMode.Multiply,
           });
           break;
         }
