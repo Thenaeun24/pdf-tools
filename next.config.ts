@@ -2,36 +2,28 @@ import type { NextConfig } from 'next';
 import path from 'node:path';
 
 /**
- * basePath / assetPrefix 를 환경 변수로 제어한다.
+ * basePath / assetPrefix 를 "GitHub Actions 안에서 NEXT_PUBLIC_BASE_PATH 가
+ * 명시적으로 주입된 경우에만" 적용하는 화이트리스트 방식으로 관리한다.
  *
- * - GitHub Pages 처럼 서브경로에서 호스팅할 때:
- *     NEXT_PUBLIC_BASE_PATH=/pdf-tools  (빌드/배포 파이프라인에서 주입)
- * - Cloudflare Pages / Vercel / 루트 도메인에서 호스팅할 때:
- *     값을 비워 두면 basePath / assetPrefix 자체를 설정하지 않는다.
+ * 배경:
+ *   - 이 프로젝트는 `저장소이름/` 하위 경로로 서빙되는 GitHub Pages 와,
+ *     루트 도메인으로 서빙되는 Cloudflare Pages 양쪽에 동시에 배포된다.
+ *   - GitHub Pages 는 basePath=/pdf-tools 가 필요하고, 다른 곳은 빈 값이
+ *     필요하다. 그런데 Cloudflare Pages UI 는 환경변수를 빈 문자열로 저장
+ *     하지 못해서, 한 번 `/pdf-tools` 같은 값이 저장되면 지울 방법이 없다.
  *
- * Cloudflare Pages 는 루트(`/`) 에서 서빙되므로 basePath 가 고정되어 있으면
- * `_next/static/...` 경로가 `/pdf-tools/_next/...` 로 요청돼 모든 JS/CSS가
- * 404 가 되고 하얀 화면만 뜨는 문제가 생긴다.
- *
- * Cloudflare Pages UI 는 환경변수를 빈 문자열로 저장하지 못하기 때문에,
- * 아래 두 가지 방식으로 안전하게 basePath 를 비운다.
- *   1) Cloudflare Pages / Vercel 빌드 환경은 각각 CF_PAGES=1, VERCEL=1 을
- *      자동 주입한다. 이 값이 감지되면 NEXT_PUBLIC_BASE_PATH 값과 무관하게
- *      basePath 를 비워 루트 서빙에 맞춘다.
- *   2) `/`, `-`, `none`, `empty` 같은 센티널 값도 "빈 값" 으로 해석한다.
+ * 해결:
+ *   - basePath 를 적용하는 유일한 트리거를 `GITHUB_ACTIONS=true` 로 고정.
+ *   - Cloudflare Pages / Vercel / 로컬 등 GitHub Actions 밖의 모든 환경은
+ *     NEXT_PUBLIC_BASE_PATH 값이 뭐든 무시하고 basePath 를 비운다.
+ *   - 결과적으로 Cloudflare 환경변수창을 건드리지 않아도 루트 서빙에 맞는
+ *     자산 경로(`/_next/...`)가 생성된다.
  */
-const isRootHostedDeploy =
-  process.env.CF_PAGES === '1' ||
-  process.env.CF_PAGES === 'true' ||
-  process.env.VERCEL === '1' ||
-  process.env.VERCEL === 'true';
-
-const EMPTY_SENTINELS = new Set(['', '/', '-', 'none', 'empty']);
+const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
 const rawBasePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').trim();
-const normalizedBasePath =
-  isRootHostedDeploy || EMPTY_SENTINELS.has(rawBasePath.toLowerCase())
-    ? ''
-    : rawBasePath.replace(/\/$/, '');
+const normalizedBasePath = isGitHubActions
+  ? rawBasePath.replace(/\/$/, '')
+  : '';
 
 const nextConfig: NextConfig = {
   output: 'export',
