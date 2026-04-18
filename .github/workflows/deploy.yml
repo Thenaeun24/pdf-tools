@@ -22,7 +22,20 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run build
+      # GitHub Pages 프로젝트 사이트는 /저장소이름/ 아래에 정적 파일이 올라간다.
+      # basePath 없이 빌드하면 `/_next/static/...` 로 요청되어 CSS·JS가 전부 404 → 스타일이 사라진 것처럼 보인다.
+      # 사용자 사이트 저장소(owner.github.io)는 루트(/)에 서빙되므로 basePath 를 비운다.
+      - name: Build static export
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          OWNER="${{ github.repository_owner }}"
+          if [ "$REPO" = "${OWNER}.github.io" ]; then
+            export NEXT_PUBLIC_BASE_PATH=""
+          else
+            export NEXT_PUBLIC_BASE_PATH="/$REPO"
+          fi
+          echo "NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH"
+          npm run build
       - run: touch out/.nojekyll
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
