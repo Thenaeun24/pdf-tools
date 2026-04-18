@@ -39,12 +39,12 @@ interface PdfMarkupProps {
 
 const BACKING_SCALE = 2; // Canvas 내부 해상도 2x
 // 굿노트 형광펜 느낌:
-// - 형광펜 전용 canvas 를 분리하고 CSS mix-blend-mode: multiply 로 PDF 위에 얹는다.
-// - 즉, 형광펜 픽셀은 source-over 로 캔버스에 누적되고, 최종적으로 브라우저가 PDF 와
-//   픽셀 단위 multiply 블렌드를 수행하므로 검은 글씨는 그대로 검게 남고 배경만 노래진다.
-// - 캔버스 내부에서 multiply 를 쓰면 결과 픽셀(반투명 노랑)이 다시 source-over 로
-//   PDF 위에 올라가 단순 알파 덧칠이 되며 글씨가 희게 흐려 보였다.
-const HIGHLIGHT_OPACITY = 0.4;
+// - 같은 캔버스 안에서 PDF 픽셀 위에 globalCompositeOperation='multiply' 로 직접 덧칠한다.
+// - 즉, "PDF 캐시 → bg 캔버스 재블릿 → 형광펜을 multiply 로 합성" 이라는 픽셀 단위
+//   합성을 거치므로 검은 글씨는 그대로 검게 남고 배경만 노래진다.
+// - CSS mix-blend-mode 는 부모 stacking context / backdrop 환경에 영향을 받아
+//   브라우저별로 결과가 달라질 수 있어 사용하지 않는다.
+const HIGHLIGHT_OPACITY = 0.55;
 const MIN_CSS_WIDTH = 280;
 const MAX_CSS_WIDTH = 960;
 
@@ -114,11 +114,12 @@ function strokeFree(
   color: string,
   lineWidthNorm: number,
   opacity: number,
+  composite: GlobalCompositeOperation = 'multiply',
 ) {
   if (points.length < 2) return;
   ctx.save();
-  // multiply 합성은 CSS(mix-blend-mode) 단계에서 PDF 와 수행한다.
-  // 캔버스 안에서는 평범한 source-over + alpha 만 사용해 형광펜 픽셀을 누적한다.
+  // PDF 가 그려진 같은 canvas 위에서 multiply 합성하므로 픽셀 단위로 PDF 와 곱셈된다.
+  ctx.globalCompositeOperation = composite;
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidthNorm * canvasW;
@@ -157,8 +158,10 @@ function strokeLine(
   color: string,
   lineWidthNorm: number,
   opacity: number,
+  composite: GlobalCompositeOperation = 'multiply',
 ) {
   ctx.save();
+  ctx.globalCompositeOperation = composite;
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidthNorm * canvasW;
@@ -306,10 +309,11 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  // 형광펜 전용 캔버스 (CSS mix-blend-mode: multiply 로 PDF 위에 합성된다)
-  const hlCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const textInputElRef = useRef<HTMLInputElement | null>(null);
+  // 깨끗한 PDF 픽셀을 보관하는 오프스크린 캔버스. bg 캔버스는 "PDF + 형광펜(multiply)"
+  // 합성 결과를 표시하므로, 형광펜이 변경될 때마다 이 캐시에서 PDF 를 다시 블릿 한다.
+  const pdfCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 드로잉 중간 상태 (refs 로 관리해서 mousemove 처리에서 매번 re-render 방지)
   const isPointerDownRef = useRef(false);
@@ -508,8 +512,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     if (pageNum < 1 || pageNum > totalPages) return;
     const bg = bgCanvasRef.current;
     const dr = drawCanvasRef.current;
-    const hl = hlCanvasRef.current;
-    if (!bg || !dr || !hl) return;
+    if (!bg || !dr) return;
 
     let cancelled = false;
     setRendering(true);
@@ -520,20 +523,38 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         const scale = (containerWidth * BACKING_SCALE) / pageSize.w;
         await renderPdfPageToCanvas(file, pageNum, bg, scale);
         if (cancelled) return;
+
+        // PDF 픽셀을 오프스크린 캐시에 보관 → 이후 형광펜 합성 시 빠르게 재블릿.
+        let cache = pdfCacheCanvasRef.current;
+        if (!cache) {
+          cache = document.createElement('canvas');
+          pdfCacheCanvasRef.current = cache;
+        }
+        cache.width = bg.width;
+        cache.height = bg.height;
+        const cctx = cache.getContext('2d');
+        if (cctx) {
+          cctx.clearRect(0, 0, cache.width, cache.height);
+          cctx.drawImage(bg, 0, 0);
+        }
+
         dr.width = bg.width;
         dr.height = bg.height;
-        hl.width = bg.width;
-        hl.height = bg.height;
         const dctx = dr.getContext('2d');
-        const hctx = hl.getContext('2d');
+        const bctx = bg.getContext('2d');
         if (dctx) dctx.clearRect(0, 0, dr.width, dr.height);
-        if (hctx) hctx.clearRect(0, 0, hl.width, hl.height);
+
         const actions = actionsMap[pageNum] ?? [];
-        for (const a of actions) {
-          if (isHighlightAction(a)) {
-            if (hctx) drawActionOn(hctx, a, hl.width, hl.height);
-          } else {
-            if (dctx) drawActionOn(dctx, a, dr.width, dr.height);
+        // 형광펜은 bg 캔버스(=PDF) 위에 multiply 로 직접 그린다.
+        if (bctx) {
+          for (const a of actions) {
+            if (isHighlightAction(a)) drawActionOn(bctx, a, bg.width, bg.height);
+          }
+        }
+        // 나머지(네모/텍스트/모자이크)는 별도 draw 캔버스에.
+        if (dctx) {
+          for (const a of actions) {
+            if (!isHighlightAction(a)) drawActionOn(dctx, a, dr.width, dr.height);
           }
         }
       } catch (err) {
@@ -554,19 +575,31 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   /* ---------------- 액션 변경 시 현재 페이지 redraw ---------------- */
 
   const redrawCurrentPage = useCallback(() => {
+    const bg = bgCanvasRef.current;
     const dr = drawCanvasRef.current;
-    const hl = hlCanvasRef.current;
-    if (!dr || !hl) return;
+    const cache = pdfCacheCanvasRef.current;
+    if (!bg || !dr) return;
+    const bctx = bg.getContext('2d');
     const dctx = dr.getContext('2d');
-    const hctx = hl.getContext('2d');
+    // bg 를 PDF 캐시로 초기화 → 형광펜이 누적/잔여 없이 항상 깨끗한 PDF 위에 합성된다.
+    if (bctx && cache) {
+      bctx.save();
+      bctx.globalCompositeOperation = 'source-over';
+      bctx.globalAlpha = 1;
+      bctx.clearRect(0, 0, bg.width, bg.height);
+      bctx.drawImage(cache, 0, 0);
+      bctx.restore();
+    }
     if (dctx) dctx.clearRect(0, 0, dr.width, dr.height);
-    if (hctx) hctx.clearRect(0, 0, hl.width, hl.height);
     const actions = actionsMap[pageNum] ?? [];
-    for (const a of actions) {
-      if (isHighlightAction(a)) {
-        if (hctx) drawActionOn(hctx, a, hl.width, hl.height);
-      } else {
-        if (dctx) drawActionOn(dctx, a, dr.width, dr.height);
+    if (bctx) {
+      for (const a of actions) {
+        if (isHighlightAction(a)) drawActionOn(bctx, a, bg.width, bg.height);
+      }
+    }
+    if (dctx) {
+      for (const a of actions) {
+        if (!isHighlightAction(a)) drawActionOn(dctx, a, dr.width, dr.height);
       }
     }
   }, [actionsMap, pageNum, drawActionOn]);
@@ -708,8 +741,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     (cx: number, cy: number) => {
       const bg = bgCanvasRef.current;
       const dr = drawCanvasRef.current;
-      const hl = hlCanvasRef.current;
-      if (!bg || !dr || !hl) return;
+      if (!bg || !dr) return;
       const dctx = dr.getContext('2d');
       if (!dctx) return;
 
@@ -722,17 +754,14 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       const bh = Math.min(dr.height - by, Math.ceil(backingBrush));
       if (bw <= 0 || bh <= 0) return;
 
-      // 합성 canvas에서 해당 영역 픽셀을 읽음.
-      // 화면에 보이는 것과 동일한 픽셀을 얻기 위해 hl 레이어는 multiply 합성으로 얹는다.
+      // bg 캔버스에는 이미 PDF + 형광펜이 multiply 로 합성되어 있다.
+      // 그 위에 draw 캔버스(rect/text/mosaic) 를 source-over 로 얹어 최종 픽셀을 얻는다.
       const tmp = document.createElement('canvas');
       tmp.width = bw;
       tmp.height = bh;
       const tctx = tmp.getContext('2d');
       if (!tctx) return;
       tctx.drawImage(bg, bx, by, bw, bh, 0, 0, bw, bh);
-      tctx.globalCompositeOperation = 'multiply';
-      tctx.drawImage(hl, bx, by, bw, bh, 0, 0, bw, bh);
-      tctx.globalCompositeOperation = 'source-over';
       tctx.drawImage(dr, bx, by, bw, bh, 0, 0, bw, bh);
       const imageData = tctx.getImageData(0, 0, bw, bh);
       const data = imageData.data;
@@ -925,28 +954,27 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   const renderPreviewFrame = useCallback(() => {
     rafIdRef.current = null;
     const canvas = drawCanvasRef.current;
-    const hlCanvas = hlCanvasRef.current;
-    if (!canvas || !hlCanvas) return;
+    const bg = bgCanvasRef.current;
+    if (!canvas || !bg) return;
     const ctx = canvas.getContext('2d');
-    const hctx = hlCanvas.getContext('2d');
-    if (!ctx || !hctx) return;
+    const bctx = bg.getContext('2d');
+    if (!ctx || !bctx) return;
 
     switch (tool) {
       case 'highlight-free': {
         if (!isPointerDownRef.current) return;
-        // 전체 스트로크를 매 프레임마다 hl canvas 에 다시 그려야
-        // 인접 세그먼트의 라운드 캡이 누적되며 생기는 진한 경계를 피할 수 있다.
-        // 형광펜은 hl canvas (mix-blend-mode: multiply) 에 그려진다.
+        // bg 캔버스를 깨끗한 PDF + 기존 형광펜 액션들로 다시 칠한 뒤,
+        // 진행 중인 스트로크를 multiply 로 한 번에 그린다.
         redrawCurrentPage();
         const pts = freePointsRef.current;
         if (pts.length >= 2) {
           strokeFree(
-            hctx,
+            bctx,
             pts,
-            hlCanvas.width,
-            hlCanvas.height,
+            bg.width,
+            bg.height,
             hlColor,
-            (hlWidth * BACKING_SCALE) / hlCanvas.width,
+            (hlWidth * BACKING_SCALE) / bg.width,
             HIGHLIGHT_OPACITY,
           );
         }
@@ -957,20 +985,21 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         if (!lineStart || !move) return;
         const endY = shiftDownRef.current ? lineStart.y : move.y;
         redrawCurrentPage();
-        // 직선 미리보기는 hl canvas 에 그려서 실제 형광펜과 동일하게 multiply 합성된다.
-        hctx.save();
-        hctx.setLineDash([5, 5]);
-        hctx.globalAlpha = HIGHLIGHT_OPACITY;
-        hctx.strokeStyle = hlColor;
-        hctx.lineWidth = hlWidth * BACKING_SCALE;
-        hctx.lineCap = 'round';
-        hctx.beginPath();
-        hctx.moveTo(lineStart.x * hlCanvas.width, lineStart.y * hlCanvas.height);
-        hctx.lineTo(move.x * hlCanvas.width, endY * hlCanvas.height);
-        hctx.stroke();
-        hctx.setLineDash([]);
-        hctx.restore();
-        // 시작점 마커는 draw canvas 에 그려서 시각적으로 명확하게 보여준다.
+        // 직선 미리보기도 bg 캔버스 위에 multiply 로 그려 실제 결과와 동일하게 보이게 한다.
+        bctx.save();
+        bctx.globalCompositeOperation = 'multiply';
+        bctx.setLineDash([5, 5]);
+        bctx.globalAlpha = HIGHLIGHT_OPACITY;
+        bctx.strokeStyle = hlColor;
+        bctx.lineWidth = hlWidth * BACKING_SCALE;
+        bctx.lineCap = 'round';
+        bctx.beginPath();
+        bctx.moveTo(lineStart.x * bg.width, lineStart.y * bg.height);
+        bctx.lineTo(move.x * bg.width, endY * bg.height);
+        bctx.stroke();
+        bctx.setLineDash([]);
+        bctx.restore();
+        // 시작점 마커는 draw canvas 에 (불투명) 그려 시각적으로 명확하게 보여준다.
         ctx.save();
         ctx.fillStyle = hlColor;
         ctx.beginPath();
@@ -1619,30 +1648,21 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
               className="relative mx-auto overflow-hidden rounded-2xl"
               style={{ width: `${zoom * 100}%` }}
             >
+              {/*
+                bg 캔버스에는 "PDF + 형광펜(multiply)" 합성 결과가 그려진다.
+                형광펜은 별도 레이어가 아니라 bg 위에 globalCompositeOperation='multiply'
+                로 직접 덧칠되므로 PDF 픽셀과 곱셈되어 검은 글씨는 그대로 검게 남는다.
+              */}
               <canvas
                 ref={bgCanvasRef}
                 className="block h-auto w-full rounded-2xl bg-white shadow-md shadow-slate-200/50"
                 style={{ zIndex: 1 }}
               />
-              {/*
-                형광펜 전용 레이어. mix-blend-mode: multiply 로 PDF 픽셀과 진짜 multiply
-                블렌드되어, 검은 글씨는 그대로 검고 배경만 노란 형광 효과가 난다.
-                포인터 이벤트는 위쪽 drawCanvas 가 받는다.
-              */}
-              <canvas
-                ref={hlCanvasRef}
-                className="absolute inset-0 h-full w-full rounded-2xl"
-                style={{
-                  zIndex: 2,
-                  pointerEvents: 'none',
-                  mixBlendMode: 'multiply',
-                }}
-              />
               <canvas
                 ref={drawCanvasRef}
                 className="absolute inset-0 h-full w-full rounded-2xl"
                 style={{
-                  zIndex: 3,
+                  zIndex: 2,
                   cursor:
                     tool === 'none'
                       ? 'default'
@@ -1687,7 +1707,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
                     position: 'absolute',
                     left: textInput.cssX,
                     top: textInput.cssY,
-                    zIndex: 4,
+                    zIndex: 3,
                     color: textColor,
                     fontSize: textSize,
                     lineHeight: 1.2,
