@@ -62,6 +62,12 @@ const TEXT_SIZES = [12, 16, 20, 28];
 const MOSAIC_SIZES = [20, 40, 60];
 const MOSAIC_INTENSITIES = [10, 15, 20];
 
+// 미리보기 확대/축소 범위.
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 0.25;
+const ZOOM_WHEEL_STEP = 0.1;
+
 /* -------------------------------------------------------------------------- */
 /*                                좌표/그리기 헬퍼                              */
 /* -------------------------------------------------------------------------- */
@@ -275,11 +281,25 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     value: string;
   } | null>(null);
 
+  // 미리보기 확대 배율 (1 = 원본 크기)
+  const [zoom, setZoom] = useState<number>(1);
+
+  // 기존 텍스트 박스 드래그 이동 상태.
+  // actionIndex: 현재 페이지 actions 배열 내 텍스트 액션 인덱스
+  // offsetX/Y: 클릭한 지점과 텍스트 시작점(0,0 상단) 사이의 정규화 오프셋
+  const textDragRef = useRef<{
+    actionIndex: number;
+    offsetX: number;
+    offsetY: number;
+    moved: boolean;
+  } | null>(null);
+
   // 컨테이너 폭 → 리사이즈 대응
   const [containerWidth, setContainerWidth] = useState(0);
 
   // DOM refs
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const textInputElRef = useRef<HTMLInputElement | null>(null);
@@ -552,6 +572,25 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
     };
   }, []);
 
+  /* ---------------- Ctrl + 휠 로 확대/축소 ---------------- */
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    // passive: false 여야 preventDefault 로 페이지 스크롤을 막을 수 있다.
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const dir = e.deltaY < 0 ? 1 : -1;
+      setZoom((z) => {
+        const next = z + dir * ZOOM_WHEEL_STEP;
+        return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(next * 100) / 100));
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   /* ---------------- 액션 저장 헬퍼 ---------------- */
 
   const pushAction = useCallback(
@@ -569,6 +608,77 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       });
     },
     [],
+  );
+
+  /* ---------------- 미리보기 확대/축소 ---------------- */
+
+  const clampZoom = useCallback(
+    (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(z * 100) / 100)),
+    [],
+  );
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + ZOOM_STEP)), [clampZoom]);
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - ZOOM_STEP)), [clampZoom]);
+  const zoomReset = useCallback(() => setZoom(1), []);
+
+  /**
+   * 현재 페이지의 특정 액션을 제자리에서 갱신한다.
+   * 텍스트 박스 드래그 이동 등 "액션 자체의 위치만 바뀌는" 케이스에 사용한다.
+   * 참고: 드래그 이동은 undo/redo 에 남기지 않는다 (잦은 갱신으로 히스토리가
+   * 오염되는 것을 막기 위함. 텍스트 생성 자체는 undo 로 되돌릴 수 있다).
+   */
+  const updateActionAt = useCallback(
+    (page: number, actionIndex: number, updater: (a: DrawingAction) => DrawingAction) => {
+      setActionsMap((prev) => {
+        const arr = prev[page];
+        if (!arr || actionIndex < 0 || actionIndex >= arr.length) return prev;
+        const next = arr.slice();
+        next[actionIndex] = updater(next[actionIndex]);
+        return { ...prev, [page]: next };
+      });
+    },
+    [],
+  );
+
+  /**
+   * 클릭 지점(정규화 좌표)이 현재 페이지의 텍스트 액션 중 어느 하나를 맞히는지
+   * 확인한다. z-order 상 뒤에 찍힌(위에 보이는) 텍스트를 우선 선택하도록
+   * 배열 끝에서부터 검사한다.
+   */
+  const hitTestTextAt = useCallback(
+    (nx: number, ny: number, canvasW: number, canvasH: number) => {
+      const actions = actionsMap[pageNum];
+      if (!actions || actions.length === 0) return null;
+      const ctx = drawCanvasRef.current?.getContext('2d');
+      if (!ctx) return null;
+      const px = nx * canvasW;
+      const py = ny * canvasH;
+      for (let i = actions.length - 1; i >= 0; i--) {
+        const a = actions[i];
+        if (a.tool !== 'text' || !a.text || !a.style.fontSize) continue;
+        const fontSizePx = a.style.fontSize * canvasH;
+        ctx.save();
+        ctx.font = `${fontSizePx}px -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif`;
+        const metrics = ctx.measureText(a.text.content);
+        ctx.restore();
+        const x0 = a.text.x * canvasW;
+        const y0 = a.text.y * canvasH;
+        // 여유 패딩으로 얇은 글자도 잡기 쉽게.
+        const pad = Math.max(4, fontSizePx * 0.15);
+        const bx0 = x0 - pad;
+        const by0 = y0 - pad;
+        const bx1 = x0 + metrics.width + pad;
+        const by1 = y0 + fontSizePx * 1.2 + pad;
+        if (px >= bx0 && px <= bx1 && py >= by0 && py <= by1) {
+          return {
+            actionIndex: i,
+            offsetX: nx - a.text.x,
+            offsetY: ny - a.text.y,
+          };
+        }
+      }
+      return null;
+    },
+    [actionsMap, pageNum],
   );
 
   /* ---------------- 모자이크 로직 ---------------- */
@@ -735,7 +845,13 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           break;
         }
         case 'text': {
-          // 해당 위치에 input 오버레이 표시 (CSS 좌표도 함께 캡처)
+          // 이미 찍혀 있는 텍스트를 클릭했으면 입력창 대신 드래그 모드로 진입.
+          const hit = hitTestTextAt(nx, ny, canvas.width, canvas.height);
+          if (hit) {
+            textDragRef.current = { ...hit, moved: false };
+            break;
+          }
+          // 빈 곳을 클릭했을 때: 해당 위치에 input 오버레이 표시.
           const rect = canvas.getBoundingClientRect();
           const clientX =
             'touches' in e
@@ -773,6 +889,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
       pageNum,
       pushAction,
       applyMosaicAt,
+      hitTestTextAt,
     ],
   );
 
@@ -918,9 +1035,21 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           applyMosaicAt(x, y);
           break;
         }
+        case 'text': {
+          const drag = textDragRef.current;
+          if (!drag) return;
+          drag.moved = true;
+          const newX = Math.max(0, Math.min(1, nx - drag.offsetX));
+          const newY = Math.max(0, Math.min(1, ny - drag.offsetY));
+          updateActionAt(pageNum, drag.actionIndex, (a) => {
+            if (!a.text) return a;
+            return { ...a, text: { ...a.text, x: newX, y: newY } };
+          });
+          break;
+        }
       }
     },
-    [file, tool, lineStart, schedulePreview, applyMosaicAt],
+    [file, tool, lineStart, schedulePreview, applyMosaicAt, pageNum, updateActionAt],
   );
 
   const handlePointerUp = useCallback(
@@ -986,6 +1115,11 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
           if (!isPointerDownRef.current) return;
           isPointerDownRef.current = false;
           finalizeMosaic();
+          break;
+        }
+        case 'text': {
+          // 드래그가 있었다면 최종 위치는 move 중에 이미 반영됨. 상태만 해제.
+          textDragRef.current = null;
           break;
         }
       }
@@ -1415,79 +1549,117 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
             </div>
           ) : null}
 
-          <div className="relative mx-auto overflow-hidden rounded-2xl">
-            <canvas
-              ref={bgCanvasRef}
-              className="block h-auto w-full rounded-2xl bg-white shadow-md shadow-slate-200/50"
-              style={{ zIndex: 1 }}
-            />
-            <canvas
-              ref={drawCanvasRef}
-              className="absolute inset-0 h-full w-full rounded-2xl"
-              style={{
-                zIndex: 2,
-                cursor:
-                  tool === 'none'
-                    ? 'default'
-                    : tool === 'text'
-                      ? 'text'
-                      : 'crosshair',
-                touchAction: tool === 'none' ? 'auto' : 'none',
-              }}
-              onMouseDown={handlePointerDown}
-              onMouseMove={handlePointerMove}
-              onMouseUp={handlePointerUp}
-              onMouseLeave={handlePointerUp}
-              onTouchStart={handlePointerDown}
-              onTouchMove={handlePointerMove}
-              onTouchEnd={handlePointerUp}
-              onTouchCancel={handlePointerUp}
-            />
+          {/* 확대/축소 컨트롤 */}
+          <div
+            className="absolute right-7 top-7 z-10 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 p-1 shadow-sm backdrop-blur"
+            title="Ctrl + 스크롤로도 확대/축소할 수 있습니다"
+          >
+            <button
+              type="button"
+              onClick={zoomOut}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="축소"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-base font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={zoomReset}
+              aria-label="확대 배율 초기화"
+              className="min-w-[3.25rem] rounded-full px-2 text-center text-xs font-semibold tabular-nums text-zinc-700 transition-colors hover:bg-zinc-100"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={zoomIn}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="확대"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-base font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
+            >
+              +
+            </button>
+          </div>
 
-            {/* 텍스트 입력 오버레이 */}
-            {textInput ? (
-              <input
-                ref={textInputElRef}
-                type="text"
-                value={textInput.value}
-                onChange={(e) =>
-                  setTextInput((prev) =>
-                    prev ? { ...prev, value: e.target.value } : prev,
-                  )
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitTextInput();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelTextInput();
-                  }
-                }}
-                onBlur={commitTextInput}
-                placeholder="텍스트 입력 후 Enter"
-                style={{
-                  position: 'absolute',
-                  left: textInput.cssX,
-                  top: textInput.cssY,
-                  zIndex: 3,
-                  color: textColor,
-                  fontSize: textSize,
-                  lineHeight: 1.2,
-                  background: 'rgba(255,255,255,0.92)',
-                  border: '1px solid #d4d4d8',
-                  borderRadius: 10,
-                  padding: '6px 12px',
-                  minWidth: 140,
-                  boxShadow:
-                    '0 4px 14px -2px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(228, 228, 231, 0.9)',
-                  backdropFilter: 'blur(4px)',
-                  outline: 'none',
-                  fontFamily:
-                    "-apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif",
-                }}
+          <div ref={viewportRef} className="relative overflow-auto rounded-2xl">
+            <div
+              className="relative mx-auto overflow-hidden rounded-2xl"
+              style={{ width: `${zoom * 100}%` }}
+            >
+              <canvas
+                ref={bgCanvasRef}
+                className="block h-auto w-full rounded-2xl bg-white shadow-md shadow-slate-200/50"
+                style={{ zIndex: 1 }}
               />
-            ) : null}
+              <canvas
+                ref={drawCanvasRef}
+                className="absolute inset-0 h-full w-full rounded-2xl"
+                style={{
+                  zIndex: 2,
+                  cursor:
+                    tool === 'none'
+                      ? 'default'
+                      : tool === 'text'
+                        ? 'text'
+                        : 'crosshair',
+                  touchAction: tool === 'none' ? 'auto' : 'none',
+                }}
+                onMouseDown={handlePointerDown}
+                onMouseMove={handlePointerMove}
+                onMouseUp={handlePointerUp}
+                onMouseLeave={handlePointerUp}
+                onTouchStart={handlePointerDown}
+                onTouchMove={handlePointerMove}
+                onTouchEnd={handlePointerUp}
+                onTouchCancel={handlePointerUp}
+              />
+
+              {/* 텍스트 입력 오버레이 */}
+              {textInput ? (
+                <input
+                  ref={textInputElRef}
+                  type="text"
+                  value={textInput.value}
+                  onChange={(e) =>
+                    setTextInput((prev) =>
+                      prev ? { ...prev, value: e.target.value } : prev,
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitTextInput();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelTextInput();
+                    }
+                  }}
+                  onBlur={commitTextInput}
+                  placeholder="텍스트 입력 후 Enter"
+                  style={{
+                    position: 'absolute',
+                    left: textInput.cssX,
+                    top: textInput.cssY,
+                    zIndex: 3,
+                    color: textColor,
+                    fontSize: textSize,
+                    lineHeight: 1.2,
+                    background: 'rgba(255,255,255,0.92)',
+                    border: '1px solid #d4d4d8',
+                    borderRadius: 10,
+                    padding: '6px 12px',
+                    minWidth: 140,
+                    boxShadow:
+                      '0 4px 14px -2px rgba(24, 24, 27, 0.12), 0 0 0 1px rgba(228, 228, 231, 0.9)',
+                    backdropFilter: 'blur(4px)',
+                    outline: 'none',
+                    fontFamily:
+                      "-apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif",
+                  }}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
 
