@@ -24,16 +24,25 @@ import { CSS } from '@dnd-kit/utilities';
 import FileDropZone from './FileDropZone';
 import ProgressBar from './ProgressBar';
 import {
+  type AssemblyPage,
   assemblePdfFromPages,
   generatePageThumbnail,
   getPdfPageCount,
   imagesToPdf,
-  mergePdfs,
 } from '@/utils/pdfUtils';
 import { createFileItem, formatFileSize, generateId } from '@/utils/fileUtils';
 import { extractRank, sortByName, sortByRank } from '@/utils/rankSort';
 import type { AddToast } from '@/hooks/useToast';
 import type { FileItem, PageItem, SortOption } from '@/types';
+
+/**
+ * Step 1 표시 단위.
+ * - 'file': PDF 한 덩어리(여러 페이지를 하나로 다룸)
+ * - 'page': 다중 페이지 PDF에서 펼쳐낸 한 페이지(다른 파일 사이에 끼워넣기 가능)
+ */
+type Step1Entry =
+  | { kind: 'file'; id: string; sourceFileId: string }
+  | { kind: 'page'; id: string; sourceFileId: string; pageIndex: number };
 
 interface PdfMergeProps {
   addToast: AddToast;
@@ -62,12 +71,20 @@ const RANK_HELP =
 /* -------------------------------------------------------------------------- */
 
 interface FileRowProps {
+  entryId: string;
   item: FileItem;
   pageCount: number | null;
-  onRemove: (id: string) => void;
+  onRemove: (sourceFileId: string) => void;
+  onExpand: (sourceFileId: string) => void;
 }
 
-function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
+function SortableFileRow({
+  entryId,
+  item,
+  pageCount,
+  onRemove,
+  onExpand,
+}: FileRowProps) {
   const {
     attributes,
     listeners,
@@ -75,13 +92,15 @@ function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({ id: entryId });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
   };
+
+  const expandable = pageCount != null && pageCount > 1;
 
   return (
     <li
@@ -117,10 +136,128 @@ function SortableFileRow({ item, pageCount, onRemove }: FileRowProps) {
           )}
         </p>
       </div>
+      {expandable ? (
+        <button
+          type="button"
+          onClick={() => onExpand(item.id)}
+          title="페이지 단위로 펼쳐서 사이에 다른 파일을 끼워넣을 수 있습니다"
+          className="flex flex-none items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+        >
+          펼치기 ▾
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => onRemove(item.id)}
         aria-label={`${item.name} 삭제`}
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+      >
+        ✕
+      </button>
+    </li>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*               STEP 1 — 펼쳐진 페이지(파일 사이에 끼워넣기) 컴포넌트            */
+/* -------------------------------------------------------------------------- */
+
+interface PageRowProps {
+  entryId: string;
+  sourceFileId: string;
+  pageIndex: number;
+  pageCount: number | null;
+  sourceName: string;
+  thumbnail?: string;
+  onRemove: (entryId: string) => void;
+  onCollapse: (sourceFileId: string) => void;
+}
+
+function SortablePageRowStep1({
+  entryId,
+  sourceFileId,
+  pageIndex,
+  pageCount,
+  sourceName,
+  thumbnail,
+  onRemove,
+  onCollapse,
+}: PageRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: entryId });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={[
+        'flex items-center gap-3 rounded-lg border bg-zinc-50/60 px-3 py-2',
+        'ml-4 border-l-2 border-l-zinc-300',
+        isDragging
+          ? 'border-zinc-400 shadow-lg'
+          : 'border-zinc-200 hover:border-zinc-300',
+      ].join(' ')}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="드래그로 순서 변경"
+        className="flex h-8 w-6 flex-none cursor-grab items-center justify-center text-zinc-400 hover:text-zinc-700 active:cursor-grabbing"
+      >
+        ☰
+      </button>
+      <div className="flex h-12 w-9 flex-none items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
+        {thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnail}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+          />
+        ) : (
+          <span className="text-[9px] text-zinc-400">…</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-zinc-800">
+          {sourceName}
+        </p>
+        <p className="text-xs text-zinc-500">
+          {pageCount != null ? (
+            <>
+              p.{pageIndex + 1}
+              <span className="text-zinc-400"> / {pageCount}</span>
+            </>
+          ) : (
+            <>p.{pageIndex + 1}</>
+          )}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onCollapse(sourceFileId)}
+        title="이 파일의 펼친 페이지를 다시 한 덩어리로 묶기"
+        className="flex flex-none items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+      >
+        접기 ▴
+      </button>
+      <button
+        type="button"
+        onClick={() => onRemove(entryId)}
+        aria-label="페이지 삭제"
         className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
       >
         ✕
@@ -247,6 +384,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
 
   // STEP 1 상태
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [entries, setEntries] = useState<Step1Entry[]>([]);
   const [pageCounts, setPageCounts] = useState<Record<string, number>>({});
   const [sortPanelOpen, setSortPanelOpen] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
@@ -257,9 +395,15 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   // STEP 2 상태
   const [pages, setPages] = useState<PageItem[]>([]);
   const [sources, setSources] = useState<Map<string, File>>(new Map());
+  // sourceFileId:pageIndex → dataUrl. Step 1/2 가 같은 키 공간을 공유한다.
   const [thumbCache, setThumbCache] = useState<Record<string, string>>({});
   const [finalizing, setFinalizing] = useState(false);
   const addPagesInputRef = useRef<HTMLInputElement | null>(null);
+
+  const filesById = useMemo(
+    () => new Map(files.map((f) => [f.id, f] as const)),
+    [files],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -329,6 +473,46 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     };
   }, [step, pages, sources, thumbCache]);
 
+  /* -------- STEP 1: 펼친 페이지 row 의 작은 썸네일 -------- */
+  useEffect(() => {
+    if (step !== 1) return;
+    let cancelled = false;
+
+    const tasks: Array<{ key: string; sourceId: string; pageIndex: number }> = [];
+    const seen = new Set<string>();
+    for (const e of entries) {
+      if (e.kind !== 'page') continue;
+      const key = `${e.sourceFileId}:${e.pageIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (thumbCache[key]) continue;
+      tasks.push({ key, sourceId: e.sourceFileId, pageIndex: e.pageIndex });
+    }
+    if (tasks.length === 0) return;
+
+    (async () => {
+      for (const t of tasks) {
+        const srcItem = filesById.get(t.sourceId);
+        if (!srcItem) continue;
+        try {
+          const dataUrl = await generatePageThumbnail(
+            srcItem.file,
+            t.pageIndex,
+            0.2,
+          );
+          if (cancelled) return;
+          setThumbCache((prev) => ({ ...prev, [t.key]: dataUrl }));
+        } catch (err) {
+          console.error('썸네일 생성 실패', err);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, entries, filesById, thumbCache]);
+
   /* -------------- STEP 1 액션들 -------------- */
 
   const onFilesAdded = useCallback(
@@ -341,26 +525,101 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         addToast('error', 'PDF 파일만 업로드할 수 있습니다.');
         return;
       }
-      setFiles((prev) => [...prev, ...pdfs.map(createFileItem)]);
+      const items = pdfs.map(createFileItem);
+      setFiles((prev) => [...prev, ...items]);
+      setEntries((prev) => [
+        ...prev,
+        ...items.map<Step1Entry>((f) => ({
+          kind: 'file',
+          id: generateId(),
+          sourceFileId: f.id,
+        })),
+      ]);
     },
     [addToast],
   );
 
-  const removeFile = useCallback((id: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+  // 파일 row(✕)에서 호출: 해당 파일을 통째로 제거 (펼친 페이지가 있다면 그것까지)
+  const removeFileBySource = useCallback((sourceFileId: string) => {
+    setEntries((prev) => prev.filter((e) => e.sourceFileId !== sourceFileId));
+    setFiles((prev) => prev.filter((f) => f.id !== sourceFileId));
+  }, []);
+
+  // 페이지 row(✕)에서 호출: 그 페이지 entry 만 제거. 더 이상 참조하는 entry 가 없으면
+  // 원본 파일도 제거한다.
+  const removePageEntry = useCallback((entryId: string) => {
+    setEntries((prev) => {
+      const target = prev.find((e) => e.id === entryId);
+      const next = prev.filter((e) => e.id !== entryId);
+      if (target) {
+        const stillUsed = next.some(
+          (e) => e.sourceFileId === target.sourceFileId,
+        );
+        if (!stillUsed) {
+          setFiles((fs) => fs.filter((f) => f.id !== target.sourceFileId));
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const expandFile = useCallback(
+    (sourceFileId: string) => {
+      const count = pageCounts[sourceFileId];
+      if (!count || count < 1) {
+        addToast('info', '페이지 수를 계산하는 중입니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      setEntries((prev) => {
+        const idx = prev.findIndex(
+          (e) => e.kind === 'file' && e.sourceFileId === sourceFileId,
+        );
+        if (idx === -1) return prev;
+        const expanded: Step1Entry[] = Array.from({ length: count }, (_, i) => ({
+          kind: 'page',
+          id: generateId(),
+          sourceFileId,
+          pageIndex: i,
+        }));
+        const next = prev.slice();
+        next.splice(idx, 1, ...expanded);
+        return next;
+      });
+    },
+    [pageCounts, addToast],
+  );
+
+  // 흩어진 페이지들을 다시 한 덩어리(file)로 묶음. 첫 번째 페이지의 위치에 놓는다.
+  const collapseFile = useCallback((sourceFileId: string) => {
+    setEntries((prev) => {
+      const firstIdx = prev.findIndex(
+        (e) => e.kind === 'page' && e.sourceFileId === sourceFileId,
+      );
+      if (firstIdx === -1) return prev;
+      const filtered = prev.filter(
+        (e) => !(e.kind === 'page' && e.sourceFileId === sourceFileId),
+      );
+      filtered.splice(firstIdx, 0, {
+        kind: 'file',
+        id: generateId(),
+        sourceFileId,
+      });
+      return filtered;
+    });
   }, []);
 
   const clearAllFiles = useCallback(() => {
     setFiles([]);
+    setEntries([]);
     setShowSortPreview(false);
   }, []);
 
-  const handleFileDragEnd = useCallback((event: DragEndEvent) => {
+  const handleEntryDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setFiles((prev) => {
-      const oldIndex = prev.findIndex((i) => i.id === active.id);
-      const newIndex = prev.findIndex((i) => i.id === over.id);
+    setEntries((prev) => {
+      const oldIndex = prev.findIndex((e) => e.id === active.id);
+      const newIndex = prev.findIndex((e) => e.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return prev;
       return arrayMove(prev, oldIndex, newIndex);
     });
@@ -379,12 +638,33 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     }
   }, [files, sortOption]);
 
+  const hasExpandedPages = useMemo(
+    () => entries.some((e) => e.kind === 'page'),
+    [entries],
+  );
+
   const applySort = useCallback(() => {
     if (files.length === 0) return;
-    setFiles(sortedPreview);
+    const sorted = sortedPreview;
+    setFiles(sorted);
+    // 정렬 적용은 항상 파일 단위로 다시 묶는다(펼친 페이지가 있어도).
+    setEntries(
+      sorted.map<Step1Entry>((f) => ({
+        kind: 'file',
+        id: generateId(),
+        sourceFileId: f.id,
+      })),
+    );
     setShowSortPreview(false);
-    addToast('success', '정렬이 적용되었습니다.');
-  }, [files.length, sortedPreview, addToast]);
+    if (hasExpandedPages) {
+      addToast(
+        'info',
+        '정렬을 적용하면서 펼쳐진 페이지를 다시 한 덩어리로 묶었습니다.',
+      );
+    } else {
+      addToast('success', '정렬이 적용되었습니다.');
+    }
+  }, [files.length, sortedPreview, hasExpandedPages, addToast]);
 
   const needsRank =
     sortOption === 'rank-high' || sortOption === 'rank-low';
@@ -392,20 +672,57 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   /* -------------- 병합 실행 → STEP 2 전환 -------------- */
 
   const handleMerge = useCallback(async () => {
-    if (files.length === 0) {
+    if (entries.length === 0) {
       addToast('error', '병합할 PDF를 먼저 업로드해 주세요.');
       return;
     }
-    if (files.length < 2) {
-      addToast('info', 'PDF를 2개 이상 올려야 병합됩니다. 편집만 하시려면 그대로 진행됩니다.');
+    if (files.length < 2 && !hasExpandedPages) {
+      addToast(
+        'info',
+        'PDF를 2개 이상 올려야 병합됩니다. 편집만 하시려면 그대로 진행됩니다.',
+      );
     }
     setMerging(true);
     setMergeProgress(0);
     try {
-      const mergedBytes = await mergePdfs(
-        files.map((f) => f.file),
-        (cur, total) => setMergeProgress(Math.round((cur / total) * 100)),
-      );
+      // entries 순서를 그대로 따라 페이지 단위 조립을 만든다.
+      // - file entry: 해당 파일의 모든 페이지를 0..N 순서로 추가
+      // - page entry: 그 한 페이지만 추가
+      const fileMap = new Map(files.map((f) => [f.id, f.file] as const));
+      const assembly: AssemblyPage[] = [];
+
+      for (const entry of entries) {
+        const srcFile = fileMap.get(entry.sourceFileId);
+        if (!srcFile) continue;
+        if (entry.kind === 'page') {
+          assembly.push({
+            sourceFileId: entry.sourceFileId,
+            pageIndex: entry.pageIndex,
+            rotation: 0,
+          });
+        } else {
+          let count = pageCounts[entry.sourceFileId];
+          if (count == null || count < 0) {
+            count = await getPdfPageCount(srcFile);
+          }
+          for (let i = 0; i < count; i++) {
+            assembly.push({
+              sourceFileId: entry.sourceFileId,
+              pageIndex: i,
+              rotation: 0,
+            });
+          }
+        }
+        setMergeProgress((p) =>
+          Math.min(95, p + Math.round(95 / entries.length)),
+        );
+      }
+
+      if (assembly.length === 0) {
+        throw new Error('병합할 페이지가 없습니다.');
+      }
+
+      const mergedBytes = await assemblePdfFromPages(assembly, fileMap);
       // Uint8Array → 안전한 ArrayBuffer 복사
       const ab = mergedBytes.buffer.slice(
         mergedBytes.byteOffset,
@@ -440,7 +757,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
       setMerging(false);
       setTimeout(() => setMergeProgress(0), 600);
     }
-  }, [files, addToast]);
+  }, [entries, files, pageCounts, hasExpandedPages, addToast]);
 
   /* -------------- STEP 2 액션들 -------------- */
 
@@ -621,6 +938,20 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     [pages, thumbCache],
   );
 
+  // Step 1 합계 페이지 수: 파일은 pageCount, 페이지 entry 는 1개씩.
+  const totalEntryPages = useMemo(() => {
+    let total = 0;
+    for (const e of entries) {
+      if (e.kind === 'page') {
+        total += 1;
+      } else {
+        const c = pageCounts[e.sourceFileId];
+        if (typeof c === 'number' && c > 0) total += c;
+      }
+    }
+    return total;
+  }, [entries, pageCounts]);
+
   /* -------------------------------------------------------------------- */
   /*                                렌더링                                */
   /* -------------------------------------------------------------------- */
@@ -721,7 +1052,22 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
               <span className="font-semibold text-zinc-800">
                 {files.length}
               </span>
-              개 PDF · 드래그로 순서 변경
+              개 PDF
+              {totalEntryPages > 0 ? (
+                <>
+                  {' · 총 '}
+                  <span className="font-semibold text-zinc-800">
+                    {totalEntryPages}
+                  </span>
+                  페이지
+                </>
+              ) : null}
+              {' · 드래그로 순서 변경'}
+              {hasExpandedPages ? (
+                <span className="ml-1 text-xs text-zinc-500">
+                  (펼친 페이지를 다른 파일 사이에 끼워넣을 수 있어요)
+                </span>
+              ) : null}
             </p>
             <button
               type="button"
@@ -735,21 +1081,43 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            onDragEnd={handleFileDragEnd}
+            onDragEnd={handleEntryDragEnd}
           >
             <SortableContext
-              items={files.map((f) => f.id)}
+              items={entries.map((e) => e.id)}
               strategy={verticalListSortingStrategy}
             >
               <ul className="flex flex-col gap-2">
-                {files.map((f) => (
-                  <SortableFileRow
-                    key={f.id}
-                    item={f}
-                    pageCount={pageCounts[f.id] ?? null}
-                    onRemove={removeFile}
-                  />
-                ))}
+                {entries.map((entry) => {
+                  const item = filesById.get(entry.sourceFileId);
+                  if (!item) return null;
+                  if (entry.kind === 'file') {
+                    return (
+                      <SortableFileRow
+                        key={entry.id}
+                        entryId={entry.id}
+                        item={item}
+                        pageCount={pageCounts[entry.sourceFileId] ?? null}
+                        onRemove={removeFileBySource}
+                        onExpand={expandFile}
+                      />
+                    );
+                  }
+                  const thumbKey = `${entry.sourceFileId}:${entry.pageIndex}`;
+                  return (
+                    <SortablePageRowStep1
+                      key={entry.id}
+                      entryId={entry.id}
+                      sourceFileId={entry.sourceFileId}
+                      pageIndex={entry.pageIndex}
+                      pageCount={pageCounts[entry.sourceFileId] ?? null}
+                      sourceName={item.name}
+                      thumbnail={thumbCache[thumbKey]}
+                      onRemove={removePageEntry}
+                      onCollapse={collapseFile}
+                    />
+                  );
+                })}
               </ul>
             </SortableContext>
           </DndContext>
@@ -859,7 +1227,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         <button
           type="button"
           onClick={handleMerge}
-          disabled={files.length === 0 || merging}
+          disabled={entries.length === 0 || merging}
           className="inline-flex items-center justify-center rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
         >
           {merging ? '병합 중...' : '병합하기'}
