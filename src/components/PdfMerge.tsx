@@ -26,7 +26,7 @@ import ProgressBar from './ProgressBar';
 import {
   type AssemblyPage,
   assemblePdfFromPages,
-  generatePageThumbnail,
+  generatePageThumbnailsBatch,
   getPdfPageCount,
   imagesToPdf,
 } from '@/utils/pdfUtils';
@@ -434,36 +434,47 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     };
   }, [files, pageCounts]);
 
+  // 진행 중이거나 완료된 썸네일 key 추적용 ref. thumbCache 를 effect 의존성에
+  // 넣으면 setThumbCache 호출마다 effect 가 재실행되어 같은 소스 PDF 에 대해
+  // pdfjs load 가 병렬 중첩되고, 일부 페이지가 빈 canvas 로 떨어지는 레이스가
+  // 발생했다. ref 로 in-flight 상태를 기록해 중복 생성을 막는다.
+  const thumbInFlight = useRef<Set<string>>(new Set());
+
   /* -------- STEP 2: 필요한 썸네일 비동기 생성 (sourceId:pageIndex 캐시) -------- */
   useEffect(() => {
     if (step !== 2) return;
     let cancelled = false;
 
-    const tasks: Array<{ key: string; sourceId: string; pageIndex: number }> = [];
-    const seen = new Set<string>();
+    // 소스별로 필요한 페이지 인덱스를 묶는다.
+    const bySource = new Map<string, number[]>();
     for (const page of pages) {
       const key = `${page.sourceFileId}:${page.pageIndex}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (thumbCache[key]) continue;
-      tasks.push({ key, sourceId: page.sourceFileId, pageIndex: page.pageIndex });
+      if (thumbInFlight.current.has(key)) continue;
+      thumbInFlight.current.add(key);
+      const arr = bySource.get(page.sourceFileId);
+      if (arr) {
+        if (!arr.includes(page.pageIndex)) arr.push(page.pageIndex);
+      } else {
+        bySource.set(page.sourceFileId, [page.pageIndex]);
+      }
     }
-    if (tasks.length === 0) return;
+    if (bySource.size === 0) return;
 
     (async () => {
-      for (const t of tasks) {
-        const srcFile = sources.get(t.sourceId);
+      for (const [sourceId, indices] of bySource) {
+        const srcFile = sources.get(sourceId);
         if (!srcFile) continue;
         try {
-          const dataUrl = await generatePageThumbnail(
-            srcFile,
-            t.pageIndex,
-            0.3,
-          );
-          if (cancelled) return;
-          setThumbCache((prev) => ({ ...prev, [t.key]: dataUrl }));
+          await generatePageThumbnailsBatch(srcFile, indices, 0.4, (idx, url) => {
+            if (cancelled) return;
+            setThumbCache((prev) => ({ ...prev, [`${sourceId}:${idx}`]: url }));
+          });
         } catch (err) {
           console.error('썸네일 생성 실패', err);
+          // 실패한 key 는 in-flight 에서 풀어 다음 기회에 재시도 가능하도록.
+          for (const idx of indices) {
+            thumbInFlight.current.delete(`${sourceId}:${idx}`);
+          }
         }
       }
     })();
@@ -471,39 +482,50 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     return () => {
       cancelled = true;
     };
-  }, [step, pages, sources, thumbCache]);
+  }, [step, pages, sources]);
 
   /* -------- STEP 1: 펼친 페이지 row 의 작은 썸네일 -------- */
   useEffect(() => {
     if (step !== 1) return;
     let cancelled = false;
 
-    const tasks: Array<{ key: string; sourceId: string; pageIndex: number }> = [];
-    const seen = new Set<string>();
+    const bySource = new Map<string, number[]>();
     for (const e of entries) {
       if (e.kind !== 'page') continue;
       const key = `${e.sourceFileId}:${e.pageIndex}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (thumbCache[key]) continue;
-      tasks.push({ key, sourceId: e.sourceFileId, pageIndex: e.pageIndex });
+      if (thumbInFlight.current.has(key)) continue;
+      thumbInFlight.current.add(key);
+      const arr = bySource.get(e.sourceFileId);
+      if (arr) {
+        if (!arr.includes(e.pageIndex)) arr.push(e.pageIndex);
+      } else {
+        bySource.set(e.sourceFileId, [e.pageIndex]);
+      }
     }
-    if (tasks.length === 0) return;
+    if (bySource.size === 0) return;
 
     (async () => {
-      for (const t of tasks) {
-        const srcItem = filesById.get(t.sourceId);
+      for (const [sourceId, indices] of bySource) {
+        const srcItem = filesById.get(sourceId);
         if (!srcItem) continue;
         try {
-          const dataUrl = await generatePageThumbnail(
+          await generatePageThumbnailsBatch(
             srcItem.file,
-            t.pageIndex,
+            indices,
             0.2,
+            (idx, url) => {
+              if (cancelled) return;
+              setThumbCache((prev) => ({
+                ...prev,
+                [`${sourceId}:${idx}`]: url,
+              }));
+            },
           );
-          if (cancelled) return;
-          setThumbCache((prev) => ({ ...prev, [t.key]: dataUrl }));
         } catch (err) {
           console.error('썸네일 생성 실패', err);
+          for (const idx of indices) {
+            thumbInFlight.current.delete(`${sourceId}:${idx}`);
+          }
         }
       }
     })();
@@ -511,7 +533,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     return () => {
       cancelled = true;
     };
-  }, [step, entries, filesById, thumbCache]);
+  }, [step, entries, filesById]);
 
   /* -------------- STEP 1 액션들 -------------- */
 
@@ -743,6 +765,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
 
       setSources(new Map([[sourceId, mergedFile]]));
       setThumbCache({});
+      thumbInFlight.current = new Set();
       setPages(newPages);
       setMergeProgress(100);
       setStep(2);
@@ -766,6 +789,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     setPages([]);
     setSources(new Map());
     setThumbCache({});
+    thumbInFlight.current = new Set();
   }, []);
 
   const handlePageDragEnd = useCallback((event: DragEndEvent) => {

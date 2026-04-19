@@ -373,7 +373,46 @@ export async function generatePageThumbnail(
 ): Promise<string> {
   const pdf = await loadPdfDocument(file);
   try {
-    const page = await pdf.getPage(pageIndex + 1);
+    return await renderPageThumbnailFromDoc(pdf, pageIndex, scale);
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+/**
+ * 한 번 열어둔 pdfjs Document 에서 여러 페이지 썸네일을 순차 렌더.
+ * - 같은 파일의 여러 썸네일이 필요할 때 getDocument/destroy 를 반복하지 않아도 됨.
+ * - Step 2 에서 여러 페이지가 동시에 필요한 경우 생기는 pdfjs 워커 경합으로
+ *   일부 페이지가 빈 canvas 로 떨어지는 증상을 막는다.
+ */
+export async function generatePageThumbnailsBatch(
+  file: File,
+  pageIndices: number[],
+  scale = 0.3,
+  onEach?: (pageIndex: number, dataUrl: string) => void,
+): Promise<Map<number, string>> {
+  const result = new Map<number, string>();
+  if (pageIndices.length === 0) return result;
+  const pdf = await loadPdfDocument(file);
+  try {
+    for (const pageIndex of pageIndices) {
+      const dataUrl = await renderPageThumbnailFromDoc(pdf, pageIndex, scale);
+      result.set(pageIndex, dataUrl);
+      onEach?.(pageIndex, dataUrl);
+    }
+    return result;
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+async function renderPageThumbnailFromDoc(
+  pdf: Awaited<ReturnType<typeof loadPdfDocument>>,
+  pageIndex: number,
+  scale: number,
+): Promise<string> {
+  const page = await pdf.getPage(pageIndex + 1);
+  try {
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.ceil(viewport.width));
@@ -381,21 +420,19 @@ export async function generatePageThumbnail(
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context 획득 실패');
 
-    // 투명한 PNG 대신 흰 배경으로 렌더링해서 보기 좋게.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+    // pdfjs 가 렌더 시작 시 canvas 를 transform 한 뒤 background 로 칠하므로
+    // 사전 fillRect 는 불필요 + 일부 환경에서 canvas 상태 충돌을 유발한다.
+    // background 파라미터로 흰 배경을 요청한다.
     await page.render({
       canvas,
       canvasContext: ctx,
       viewport,
+      background: '#ffffff',
     } as unknown as Parameters<typeof page.render>[0]).promise;
 
-    const dataUrl = canvas.toDataURL('image/png');
-    page.cleanup();
-    return dataUrl;
+    return canvas.toDataURL('image/png');
   } finally {
-    await pdf.destroy();
+    page.cleanup();
   }
 }
 
