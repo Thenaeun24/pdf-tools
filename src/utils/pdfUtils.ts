@@ -1,5 +1,4 @@
 import {
-  BlendMode,
   LineCapStyle,
   PDFDocument,
   StandardFonts,
@@ -598,7 +597,8 @@ export async function applyMarkupToPdf(
   }
 
   for (const [pageIdx, pageActions] of byPage) {
-    const page = pages[pageIdx];
+    // action.page 는 UI(PdfMarkup)에서 1-based 로 저장된다.
+    const page = pages[pageIdx - 1];
     if (!page) continue;
     const { width: pw, height: ph } = page.getSize();
 
@@ -628,7 +628,6 @@ export async function applyMarkupToPdf(
             borderWidth: thickness,
             borderOpacity: opacity,
             borderLineCap: LineCapStyle.Round,
-            blendMode: BlendMode.Multiply,
           });
           break;
         }
@@ -645,7 +644,6 @@ export async function applyMarkupToPdf(
             color,
             opacity,
             lineCap: LineCapStyle.Round,
-            blendMode: BlendMode.Multiply,
           });
           break;
         }
