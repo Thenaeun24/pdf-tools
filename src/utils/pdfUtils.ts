@@ -414,6 +414,9 @@ export interface AssemblyPage {
  * 임의의 소스 PDF들에서 페이지 단위로 골라 하나의 PDF로 조립.
  * - pages 순서대로 출력
  * - 각 페이지에 rotation(추가 회전)을 합산 적용
+ * - 같은 소스의 여러 페이지는 한 번의 copyPages 로 배치 복사한다.
+ *   페이지마다 따로 copyPages 를 호출하면 pdf-lib 이 공유 리소스(폰트/이미지 등)
+ *   추적을 제대로 못해 결과물이 빈 페이지로 나오거나 깨지는 케이스가 있다.
  */
 export async function assemblePdfFromPages(
   pages: AssemblyPage[],
@@ -422,21 +425,37 @@ export async function assemblePdfFromPages(
   if (pages.length === 0) throw new Error('페이지가 없습니다.');
 
   const out = await PDFDocument.create();
-  const docCache = new Map<string, PDFDocument>();
 
-  for (const page of pages) {
-    let src = docCache.get(page.sourceFileId);
-    if (!src) {
-      const srcFile = sources.get(page.sourceFileId);
-      if (!srcFile) {
-        throw new Error(`소스 파일을 찾을 수 없습니다: ${page.sourceFileId}`);
-      }
-      const bytes = await srcFile.arrayBuffer();
-      src = await PDFDocument.load(bytes, { ignoreEncryption: true });
-      docCache.set(page.sourceFileId, src);
+  // 소스별로 copy 해야 할 페이지 인덱스를 사용 순서대로 모은다(중복 허용).
+  const perSource = new Map<string, number[]>();
+  for (const p of pages) {
+    const arr = perSource.get(p.sourceFileId);
+    if (arr) arr.push(p.pageIndex);
+    else perSource.set(p.sourceFileId, [p.pageIndex]);
+  }
+
+  // 소스별 단 한 번의 copyPages 로 모두 복사 (mergePdfs 와 동일한 패턴).
+  const copiesBySource = new Map<string, Awaited<ReturnType<typeof out.copyPages>>>();
+  for (const [sourceId, indices] of perSource) {
+    const srcFile = sources.get(sourceId);
+    if (!srcFile) {
+      throw new Error(`소스 파일을 찾을 수 없습니다: ${sourceId}`);
     }
+    const bytes = await srcFile.arrayBuffer();
+    const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    const copies = await out.copyPages(src, indices);
+    copiesBySource.set(sourceId, copies);
+  }
 
-    const [copied] = await out.copyPages(src, [page.pageIndex]);
+  // pages 순서대로 커서를 옮기며 addPage (중복/섞인 순서 모두 대응).
+  const cursor = new Map<string, number>();
+  for (const page of pages) {
+    const copies = copiesBySource.get(page.sourceFileId);
+    if (!copies) continue;
+    const i = cursor.get(page.sourceFileId) ?? 0;
+    const copied = copies[i];
+    cursor.set(page.sourceFileId, i + 1);
+    if (!copied) continue;
     if (page.rotation) {
       const current = copied.getRotation().angle || 0;
       const next = (((current + page.rotation) % 360) + 360) % 360;
