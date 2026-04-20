@@ -453,6 +453,9 @@ export interface AssemblyPage {
  * - 같은 소스의 여러 페이지는 한 번의 copyPages 로 배치 복사한다.
  *   페이지마다 따로 copyPages 를 호출하면 pdf-lib 이 공유 리소스(폰트/이미지 등)
  *   추적을 제대로 못해 결과물이 빈 페이지로 나오거나 깨지는 케이스가 있다.
+ * - vector(pdf-lib) 복사 후 pdfjs 로 스팟 체크해서 페이지가 깨졌는지(거의
+ *   전부 흰색) 판별. 깨진 소스가 발견되면 그 소스의 모든 페이지는 pdfjs 래스터
+ *   경로로 embed 한다. (텍스트 선택은 포기하지만 "아무것도 안 보임" 보다 낫다.)
  */
 export async function assemblePdfFromPages(
   pages: AssemblyPage[],
@@ -460,17 +463,30 @@ export async function assemblePdfFromPages(
 ): Promise<Uint8Array> {
   if (pages.length === 0) throw new Error('페이지가 없습니다.');
 
+  // 각 소스가 vector 경로로 안전한지 확인. 소스별 첫 페이지를 pdf-lib 으로
+  // 복사 → 임시 save → pdfjs 로 렌더 → 비어 있으면 래스터 모드로 강등.
+  const rasterSources = new Set<string>();
+  for (const [sourceId, file] of sources) {
+    const pageIndices = pages
+      .filter((p) => p.sourceFileId === sourceId)
+      .map((p) => p.pageIndex);
+    if (pageIndices.length === 0) continue;
+    const probeIndex = pageIndices[0];
+    const healthy = await probeSourceIsVectorSafe(file, probeIndex);
+    if (!healthy) rasterSources.add(sourceId);
+  }
+
   const out = await PDFDocument.create();
 
-  // 소스별로 copy 해야 할 페이지 인덱스를 사용 순서대로 모은다(중복 허용).
+  // 소스별로 vector 복사할 페이지 인덱스를 사용 순서대로 모은다.
   const perSource = new Map<string, number[]>();
   for (const p of pages) {
+    if (rasterSources.has(p.sourceFileId)) continue;
     const arr = perSource.get(p.sourceFileId);
     if (arr) arr.push(p.pageIndex);
     else perSource.set(p.sourceFileId, [p.pageIndex]);
   }
 
-  // 소스별 단 한 번의 copyPages 로 모두 복사 (mergePdfs 와 동일한 패턴).
   const copiesBySource = new Map<string, Awaited<ReturnType<typeof out.copyPages>>>();
   for (const [sourceId, indices] of perSource) {
     const srcFile = sources.get(sourceId);
@@ -483,24 +499,173 @@ export async function assemblePdfFromPages(
     copiesBySource.set(sourceId, copies);
   }
 
-  // pages 순서대로 커서를 옮기며 addPage (중복/섞인 순서 모두 대응).
-  const cursor = new Map<string, number>();
-  for (const page of pages) {
-    const copies = copiesBySource.get(page.sourceFileId);
-    if (!copies) continue;
-    const i = cursor.get(page.sourceFileId) ?? 0;
-    const copied = copies[i];
-    cursor.set(page.sourceFileId, i + 1);
-    if (!copied) continue;
-    if (page.rotation) {
-      const current = copied.getRotation().angle || 0;
-      const next = (((current + page.rotation) % 360) + 360) % 360;
-      copied.setRotation(degrees(next));
+  // 래스터 소스는 pdfjs 로 한 번 열어 필요한 페이지를 순차 렌더.
+  const rasterPdfs = new Map<string, Awaited<ReturnType<typeof loadPdfDocument>>>();
+  try {
+    const cursor = new Map<string, number>();
+    for (const page of pages) {
+      if (rasterSources.has(page.sourceFileId)) {
+        let pdf = rasterPdfs.get(page.sourceFileId);
+        if (!pdf) {
+          const srcFile = sources.get(page.sourceFileId);
+          if (!srcFile) continue;
+          pdf = await loadPdfDocument(srcFile);
+          rasterPdfs.set(page.sourceFileId, pdf);
+        }
+        await appendRasterizedPage(out, pdf, page.pageIndex, page.rotation);
+        continue;
+      }
+      const copies = copiesBySource.get(page.sourceFileId);
+      if (!copies) continue;
+      const i = cursor.get(page.sourceFileId) ?? 0;
+      const copied = copies[i];
+      cursor.set(page.sourceFileId, i + 1);
+      if (!copied) continue;
+      if (page.rotation) {
+        const current = copied.getRotation().angle || 0;
+        const next = (((current + page.rotation) % 360) + 360) % 360;
+        copied.setRotation(degrees(next));
+      }
+      out.addPage(copied);
     }
-    out.addPage(copied);
+    return await out.save();
+  } finally {
+    for (const pdf of rasterPdfs.values()) {
+      try {
+        await pdf.destroy();
+      } catch {
+        /* noop */
+      }
+    }
   }
+}
 
-  return await out.save();
+/**
+ * 주어진 소스 PDF 의 한 페이지를 pdf-lib 으로 복사 → 임시 save → pdfjs 로
+ * 렌더해 대부분 흰색이면 "이 소스는 vector 복사로 깨진다" 로 판정한다.
+ * - 소스 자체가 원래 흰 페이지였다면 pdfjs 로 원본을 먼저 렌더해 비교.
+ */
+async function probeSourceIsVectorSafe(
+  file: File,
+  probePageIndex: number,
+): Promise<boolean> {
+  try {
+    // 1) 원본을 pdfjs 로 렌더해서 "원래 내용이 있는지" 판정 (기준값).
+    const originalHasContent = await pdfjsPageHasContent(file, probePageIndex);
+    if (!originalHasContent) {
+      // 원래 흰 페이지라면 vector 경로 유지해도 무방 (결과가 달라지지 않음).
+      return true;
+    }
+
+    // 2) pdf-lib 으로 해당 페이지만 복사 → save → pdfjs 로 렌더.
+    const bytes = await file.arrayBuffer();
+    const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    const out = await PDFDocument.create();
+    const [copied] = await out.copyPages(src, [probePageIndex]);
+    out.addPage(copied);
+    const probeBytes = await out.save();
+    const ab = probeBytes.buffer.slice(
+      probeBytes.byteOffset,
+      probeBytes.byteOffset + probeBytes.byteLength,
+    ) as ArrayBuffer;
+    const probeFile = new File([ab], 'probe.pdf', {
+      type: 'application/pdf',
+    });
+    const copiedHasContent = await pdfjsPageHasContent(probeFile, 0);
+    return copiedHasContent;
+  } catch {
+    // 조사 중 오류나면 안전하게 vector 경로 유지 (vector 가 흔히 더 정확).
+    return true;
+  }
+}
+
+async function pdfjsPageHasContent(
+  file: File,
+  pageIndex: number,
+): Promise<boolean> {
+  const pdf = await loadPdfDocument(file);
+  try {
+    const page = await pdf.getPage(pageIndex + 1);
+    try {
+      const viewport = page.getViewport({ scale: 0.25 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.ceil(viewport.width));
+      canvas.height = Math.max(1, Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return true;
+      await page.render({
+        canvas,
+        canvasContext: ctx,
+        viewport,
+        background: '#ffffff',
+      } as unknown as Parameters<typeof page.render>[0]).promise;
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const total = img.data.length / 4;
+      if (total === 0) return false;
+      let nonWhite = 0;
+      for (let i = 0; i < img.data.length; i += 4) {
+        const r = img.data[i];
+        const g = img.data[i + 1];
+        const b = img.data[i + 2];
+        if (r < 245 || g < 245 || b < 245) {
+          nonWhite++;
+          if (nonWhite / total > 0.005) return true;
+        }
+      }
+      return false;
+    } finally {
+      page.cleanup();
+    }
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+async function appendRasterizedPage(
+  out: PDFDocument,
+  pdf: Awaited<ReturnType<typeof loadPdfDocument>>,
+  pageIndex: number,
+  extraRotation: number,
+): Promise<void> {
+  const page = await pdf.getPage(pageIndex + 1);
+  try {
+    // 144 DPI 정도면 화면/프린트에 충분하고 파일 크기 과도하지 않다.
+    const targetDpi = 144;
+    const scale = targetDpi / 72;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.ceil(viewport.width));
+    canvas.height = Math.max(1, Math.ceil(viewport.height));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context 획득 실패');
+    await page.render({
+      canvas,
+      canvasContext: ctx,
+      viewport,
+      background: '#ffffff',
+    } as unknown as Parameters<typeof page.render>[0]).promise;
+
+    const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', 0.85);
+    const jpgBytes = new Uint8Array(await jpgBlob.arrayBuffer());
+    const embedded = await out.embedJpg(jpgBytes);
+
+    // 포인트 단위 페이지 크기 (이미지가 이미 native rotation 을 반영).
+    const widthPt = viewport.width / scale;
+    const heightPt = viewport.height / scale;
+    const outPage = out.addPage([widthPt, heightPt]);
+    outPage.drawImage(embedded, {
+      x: 0,
+      y: 0,
+      width: widthPt,
+      height: heightPt,
+    });
+    if (extraRotation) {
+      const next = (((extraRotation % 360) + 360) % 360);
+      outPage.setRotation(degrees(next));
+    }
+  } finally {
+    page.cleanup();
+  }
 }
 
 /* -------------------------------------------------------------------------- */

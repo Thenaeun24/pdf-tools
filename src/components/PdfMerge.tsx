@@ -24,7 +24,6 @@ import { CSS } from '@dnd-kit/utilities';
 import FileDropZone from './FileDropZone';
 import ProgressBar from './ProgressBar';
 import {
-  type AssemblyPage,
   assemblePdfFromPages,
   generatePageThumbnailsBatch,
   getPdfPageCount,
@@ -707,19 +706,22 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
     setMerging(true);
     setMergeProgress(0);
     try {
-      // entries 순서를 그대로 따라 페이지 단위 조립을 만든다.
-      // - file entry: 해당 파일의 모든 페이지를 0..N 순서로 추가
-      // - page entry: 그 한 페이지만 추가
-      const fileMap = new Map(files.map((f) => [f.id, f.file] as const));
-      const assembly: AssemblyPage[] = [];
+      // Step 2 는 원본 파일들을 그대로 참조(sourceFileId + pageIndex)한다.
+      // 중간 머지 PDF 를 만들지 않기 때문에 pdf-lib copyPages 가 특정 PDF 에서
+      // content stream 을 제대로 복제하지 못해 썸네일이 빈 페이지로 뜨는
+      // 문제가 발생하지 않는다. 실제 머지는 "최종 PDF 다운로드" 에서 수행.
+      const newSources = new Map<string, File>();
+      for (const f of files) newSources.set(f.id, f.file);
 
+      const newPages: PageItem[] = [];
       for (const entry of entries) {
-        const srcFile = fileMap.get(entry.sourceFileId);
+        const srcFile = newSources.get(entry.sourceFileId);
         if (!srcFile) continue;
         if (entry.kind === 'page') {
-          assembly.push({
-            sourceFileId: entry.sourceFileId,
+          newPages.push({
+            id: generateId(),
             pageIndex: entry.pageIndex,
+            sourceFileId: entry.sourceFileId,
             rotation: 0,
           });
         } else {
@@ -728,9 +730,10 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
             count = await getPdfPageCount(srcFile);
           }
           for (let i = 0; i < count; i++) {
-            assembly.push({
-              sourceFileId: entry.sourceFileId,
+            newPages.push({
+              id: generateId(),
               pageIndex: i,
+              sourceFileId: entry.sourceFileId,
               rotation: 0,
             });
           }
@@ -740,36 +743,17 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         );
       }
 
-      if (assembly.length === 0) {
+      if (newPages.length === 0) {
         throw new Error('병합할 페이지가 없습니다.');
       }
 
-      const mergedBytes = await assemblePdfFromPages(assembly, fileMap);
-      // Uint8Array → 안전한 ArrayBuffer 복사
-      const ab = mergedBytes.buffer.slice(
-        mergedBytes.byteOffset,
-        mergedBytes.byteOffset + mergedBytes.byteLength,
-      ) as ArrayBuffer;
-      const mergedFile = new File([ab], 'merged.pdf', {
-        type: 'application/pdf',
-      });
-      const pageCount = await getPdfPageCount(mergedFile);
-
-      const sourceId = generateId();
-      const newPages: PageItem[] = Array.from({ length: pageCount }, (_, i) => ({
-        id: generateId(),
-        pageIndex: i,
-        sourceFileId: sourceId,
-        rotation: 0,
-      }));
-
-      setSources(new Map([[sourceId, mergedFile]]));
+      setSources(newSources);
       setThumbCache({});
       thumbInFlight.current = new Set();
       setPages(newPages);
       setMergeProgress(100);
       setStep(2);
-      addToast('success', `${pageCount}페이지로 병합되었습니다.`);
+      addToast('success', `${newPages.length}페이지가 준비되었습니다.`);
     } catch (err) {
       console.error(err);
       addToast(
