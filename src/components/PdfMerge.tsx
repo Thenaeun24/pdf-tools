@@ -325,7 +325,7 @@ function SortablePageCard({
               <img
                 src={page.thumbnail}
                 alt={`페이지 ${orderIndex + 1}`}
-                className="max-h-[240px] max-w-full object-contain"
+                className="max-h-full max-w-full object-contain"
               />
             </div>
           </div>
@@ -397,6 +397,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   // sourceFileId:pageIndex → dataUrl. Step 1/2 가 같은 키 공간을 공유한다.
   const [thumbCache, setThumbCache] = useState<Record<string, string>>({});
   const [finalizing, setFinalizing] = useState(false);
+  const [thumbZoom, setThumbZoom] = useState<'sm' | 'md' | 'lg'>('md');
   const addPagesInputRef = useRef<HTMLInputElement | null>(null);
 
   const filesById = useMemo(
@@ -464,7 +465,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         const srcFile = sources.get(sourceId);
         if (!srcFile) continue;
         try {
-          await generatePageThumbnailsBatch(srcFile, indices, 0.4, (idx, url) => {
+          await generatePageThumbnailsBatch(srcFile, indices, 0.7, (idx, url) => {
             if (cancelled) return;
             setThumbCache((prev) => ({ ...prev, [`${sourceId}:${idx}`]: url }));
           });
@@ -998,6 +999,34 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
           >
             {finalizing ? '생성 중...' : '최종 PDF 다운로드'}
           </button>
+          <div
+            className="ml-auto inline-flex items-center overflow-hidden rounded-md border border-zinc-200 bg-white"
+            role="group"
+            aria-label="썸네일 크기"
+          >
+            {(
+              [
+                { id: 'sm', label: '작게' },
+                { id: 'md', label: '보통' },
+                { id: 'lg', label: '크게' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setThumbZoom(opt.id)}
+                aria-pressed={thumbZoom === opt.id}
+                className={[
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  thumbZoom === opt.id
+                    ? 'bg-zinc-900 text-white'
+                    : 'text-zinc-600 hover:bg-zinc-50',
+                ].join(' ')}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <input
             ref={addPagesInputRef}
             type="file"
@@ -1019,7 +1048,16 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
             items={pagesWithThumbs.map((p) => p.id)}
             strategy={rectSortingStrategy}
           >
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            <ul
+              className={[
+                'grid gap-3',
+                thumbZoom === 'sm'
+                  ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6'
+                  : thumbZoom === 'lg'
+                    ? 'grid-cols-1 sm:grid-cols-2'
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
+              ].join(' ')}
+            >
               {pagesWithThumbs.map((page, idx) => (
                 <SortablePageCard
                   key={page.id}
