@@ -22,6 +22,8 @@ import {
   applyMarkupToPdf,
   renderPdfPageToCanvas,
 } from '@/utils/pdfUtils';
+import { ensureDecryptedPdfFile } from '@/utils/pdfDecrypt';
+import { usePasswordPrompt } from '@/hooks/usePasswordPrompt';
 import type {
   DrawingAction,
   MarkupStyle,
@@ -251,6 +253,8 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   const [rendering, setRendering] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const { requestPassword, passwordModal } = usePasswordPrompt();
 
   // 도구/스타일
   const [tool, setTool] = useState<MarkupTool>('none');
@@ -341,7 +345,7 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   }, []);
 
   const onFilesAdded = useCallback(
-    (files: File[]) => {
+    async (files: File[]) => {
       const picked = files.find(
         (f) =>
           f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
@@ -350,16 +354,32 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
         addToast('error', 'PDF 파일만 업로드할 수 있습니다.');
         return;
       }
+      setUnlocking(true);
+      let prepared: File | null;
+      try {
+        prepared = await ensureDecryptedPdfFile(picked, requestPassword);
+      } catch (err) {
+        console.error(err);
+        addToast(
+          'error',
+          err instanceof Error ? err.message : 'PDF 잠금 해제에 실패했습니다.',
+        );
+        return;
+      } finally {
+        setUnlocking(false);
+      }
+      if (!prepared) return; // 비밀번호 입력 취소
+
       setActionsMap({});
       setRedoMap({});
       setLineStart(null);
       setTextInput(null);
       setPageNum(1);
       setTotalPages(0);
-      setFile(picked);
+      setFile(prepared);
       mosaicImgCacheRef.current.clear();
     },
-    [addToast],
+    [addToast, requestPassword],
   );
 
   // 파일 변경 시 페이지 수와 크기 계산
@@ -1323,13 +1343,23 @@ export default function PdfMarkup({ addToast }: PdfMarkupProps) {
   // 파일 미업로드 상태
   if (!file) {
     return (
-      <FileDropZone
-        accept={{ 'application/pdf': ['.pdf'] }}
-        multiple={false}
-        onFilesAdded={onFilesAdded}
-        label="PDF 파일을 드래그하거나 클릭해서 선택하세요"
-        description="업로드된 파일은 브라우저에서만 처리됩니다."
-      />
+      <>
+        {passwordModal}
+        {unlocking ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/40 px-8 py-12 text-center text-sm text-zinc-500">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+            PDF 잠금 해제 중...
+          </div>
+        ) : (
+          <FileDropZone
+            accept={{ 'application/pdf': ['.pdf'] }}
+            multiple={false}
+            onFilesAdded={onFilesAdded}
+            label="PDF 파일을 드래그하거나 클릭해서 선택하세요"
+            description="업로드된 파일은 브라우저에서만 처리됩니다. 비밀번호로 잠긴 PDF 도 열 수 있어요."
+          />
+        )}
+      </>
     );
   }
 

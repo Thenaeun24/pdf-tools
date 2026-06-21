@@ -29,6 +29,8 @@ import {
   getPdfPageCount,
   imagesToPdf,
 } from '@/utils/pdfUtils';
+import { ensureDecryptedPdfFiles } from '@/utils/pdfDecrypt';
+import { usePasswordPrompt } from '@/hooks/usePasswordPrompt';
 import { createFileItem, formatFileSize, generateId } from '@/utils/fileUtils';
 import { extractRank, sortByName, sortByRank } from '@/utils/rankSort';
 import type { AddToast } from '@/hooks/useToast';
@@ -390,6 +392,8 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   const [showSortPreview, setShowSortPreview] = useState(false);
   const [merging, setMerging] = useState(false);
   const [mergeProgress, setMergeProgress] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const { requestPassword, passwordModal } = usePasswordPrompt();
 
   // STEP 2 상태
   const [pages, setPages] = useState<PageItem[]>([]);
@@ -538,7 +542,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   /* -------------- STEP 1 액션들 -------------- */
 
   const onFilesAdded = useCallback(
-    (added: File[]) => {
+    async (added: File[]) => {
       const pdfs = added.filter(
         (f) =>
           f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
@@ -547,7 +551,25 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         addToast('error', 'PDF 파일만 업로드할 수 있습니다.');
         return;
       }
-      const items = pdfs.map(createFileItem);
+
+      setUnlocking(true);
+      let prepared: File[];
+      try {
+        // 비밀번호로 잠긴 PDF 는 잠금을 해제한 평문으로 바꿔서 추가한다.
+        prepared = await ensureDecryptedPdfFiles(pdfs, requestPassword);
+      } catch (err) {
+        console.error(err);
+        addToast(
+          'error',
+          err instanceof Error ? err.message : 'PDF 잠금 해제에 실패했습니다.',
+        );
+        return;
+      } finally {
+        setUnlocking(false);
+      }
+      if (prepared.length === 0) return; // 전부 취소
+
+      const items = prepared.map(createFileItem);
       setFiles((prev) => [...prev, ...items]);
       setEntries((prev) => [
         ...prev,
@@ -558,7 +580,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         })),
       ]);
     },
-    [addToast],
+    [addToast, requestPassword],
   );
 
   // 파일 row(✕)에서 호출: 해당 파일을 통째로 제거 (펼친 페이지가 있다면 그것까지)
@@ -831,18 +853,32 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
       const inputEl = e.target;
 
       try {
-        const pdfFiles: File[] = [];
+        const rawPdfFiles: File[] = [];
         const imageFiles: File[] = [];
         for (const f of Array.from(list)) {
           const type = f.type.toLowerCase();
           const lower = f.name.toLowerCase();
           if (type === 'application/pdf' || lower.endsWith('.pdf')) {
-            pdfFiles.push(f);
+            rawPdfFiles.push(f);
           } else if (
             type.startsWith('image/') ||
             /\.(png|jpe?g|webp)$/i.test(lower)
           ) {
             imageFiles.push(f);
+          }
+        }
+
+        // 비밀번호로 잠긴 PDF 는 잠금 해제 후 추가. 취소된 파일은 건너뛴다.
+        let pdfFiles = rawPdfFiles;
+        if (rawPdfFiles.length > 0) {
+          setUnlocking(true);
+          try {
+            pdfFiles = await ensureDecryptedPdfFiles(
+              rawPdfFiles,
+              requestPassword,
+            );
+          } finally {
+            setUnlocking(false);
           }
         }
 
@@ -903,7 +939,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
         inputEl.value = '';
       }
     },
-    [sources, addToast],
+    [sources, addToast, requestPassword],
   );
 
   const handleDownload = useCallback(async () => {
@@ -968,6 +1004,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
   if (step === 2) {
     return (
       <div className="flex flex-col gap-5">
+        {passwordModal}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
@@ -1079,6 +1116,13 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
 
   return (
     <div className="flex flex-col gap-5">
+      {passwordModal}
+      {unlocking ? (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/40 px-8 py-6 text-center text-sm text-zinc-500">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+          PDF 잠금 해제 중...
+        </div>
+      ) : null}
       <FileDropZone
         accept={PDF_ACCEPT}
         multiple
@@ -1088,7 +1132,7 @@ export default function PdfMerge({ addToast }: PdfMergeProps) {
             ? 'PDF 파일들을 드래그하거나 클릭해서 선택하세요'
             : 'PDF 추가 업로드'
         }
-        description="여러 PDF를 한 번에 선택할 수 있습니다"
+        description="여러 PDF를 한 번에 선택할 수 있습니다. 비밀번호로 잠긴 PDF 도 열 수 있어요."
       />
 
       {files.length > 0 ? (

@@ -38,13 +38,29 @@ const nextConfig: NextConfig = {
 
   // pdfjs-dist / pdf-lib가 선택적 의존성으로 Node `canvas`를 참조함.
   // 브라우저 번들에서는 불필요하므로 빈 모듈로 대체한다.
+  //
+  // qpdf-wasm(@neslinesli93/qpdf-wasm) glue 는 Node 환경 분기에서 fs/path/crypto
+  // 를 require 한다. 브라우저 런타임에서는 그 분기가 실행되지 않지만 번들러가
+  // 모듈 해석은 시도하므로, 빈 모듈로 대체해 정적 export 빌드를 통과시킨다.
   turbopack: {
     resolveAlias: {
       canvas: path.resolve('./empty-module.js'),
+      // browser 조건으로만 적용해 서버(빌드) 측 fs/path/crypto 는 그대로 둔다.
+      fs: { browser: './empty-module.js' },
+      path: { browser: './empty-module.js' },
+      crypto: { browser: './empty-module.js' },
     },
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias.canvas = false;
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+      };
+    }
     return config;
   },
 };

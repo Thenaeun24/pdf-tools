@@ -13,6 +13,8 @@ import {
   splitPdf,
   splitPdfByPage,
 } from '@/utils/pdfUtils';
+import { ensureDecryptedPdfFile } from '@/utils/pdfDecrypt';
+import { usePasswordPrompt } from '@/hooks/usePasswordPrompt';
 import { formatFileSize } from '@/utils/fileUtils';
 import type { AddToast } from '@/hooks/useToast';
 
@@ -82,6 +84,8 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
   const [rangeInput, setRangeInput] = useState('');
   const [splitting, setSplitting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const { requestPassword, passwordModal } = usePasswordPrompt();
 
   // 페이지 수 비동기 계산
   useEffect(() => {
@@ -109,7 +113,7 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
   }, [file, addToast]);
 
   const onFilesAdded = useCallback(
-    (files: File[]) => {
+    async (files: File[]) => {
       const picked = files.find(
         (f) =>
           f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
@@ -118,10 +122,23 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
         addToast('error', 'PDF 파일만 업로드할 수 있습니다.');
         return;
       }
-      setFile(picked);
-      setProgress(0);
+      setUnlocking(true);
+      try {
+        const prepared = await ensureDecryptedPdfFile(picked, requestPassword);
+        if (!prepared) return; // 비밀번호 입력 취소
+        setFile(prepared);
+        setProgress(0);
+      } catch (err) {
+        console.error(err);
+        addToast(
+          'error',
+          err instanceof Error ? err.message : 'PDF 잠금 해제에 실패했습니다.',
+        );
+      } finally {
+        setUnlocking(false);
+      }
     },
-    [addToast],
+    [addToast, requestPassword],
   );
 
   const reset = useCallback(() => {
@@ -192,14 +209,22 @@ export default function PdfSplit({ addToast }: PdfSplitProps) {
 
   return (
     <div className="flex flex-col gap-5">
+      {passwordModal}
       {!file ? (
-        <FileDropZone
-          accept={{ 'application/pdf': ['.pdf'] }}
-          multiple={false}
-          onFilesAdded={onFilesAdded}
-          label="PDF 파일을 드래그하거나 클릭해서 선택하세요"
-          description="업로드된 파일은 브라우저에서만 처리됩니다."
-        />
+        unlocking ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/40 px-8 py-12 text-center text-sm text-zinc-500">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+            PDF 잠금 해제 중...
+          </div>
+        ) : (
+          <FileDropZone
+            accept={{ 'application/pdf': ['.pdf'] }}
+            multiple={false}
+            onFilesAdded={onFilesAdded}
+            label="PDF 파일을 드래그하거나 클릭해서 선택하세요"
+            description="업로드된 파일은 브라우저에서만 처리됩니다. 비밀번호로 잠긴 PDF 도 열 수 있어요."
+          />
+        )
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200/90 bg-white px-4 py-3 shadow-sm shadow-zinc-900/5">
           <div className="min-w-0">
