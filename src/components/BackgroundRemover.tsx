@@ -8,6 +8,7 @@ import ProgressBar from './ProgressBar';
 import {
   removeBackground,
   isWebGPUAvailable,
+  getActiveDevice,
   type LoadProgress,
 } from '@/utils/backgroundRemoval';
 import { createFileItem } from '@/utils/fileUtils';
@@ -130,6 +131,7 @@ export default function BackgroundRemover({
 
     let ok = 0;
     let firstError = '';
+    let lastMs = 0;
     for (const target of pending) {
       const file = fileMap.current.get(target.id);
       if (!file) continue;
@@ -141,7 +143,9 @@ export default function BackgroundRemover({
       );
 
       try {
+        const started = performance.now();
         const blob = await removeBackground(file, onLoad);
+        lastMs = performance.now() - started;
         setLoadStatus('모델 준비 완료');
         const resultUrl = URL.createObjectURL(blob);
         ok++;
@@ -172,7 +176,16 @@ export default function BackgroundRemover({
     }
 
     setBusy(false);
-    if (ok > 0) addToast('success', `${ok}개 이미지 배경 제거 완료.`);
+    if (ok > 0) {
+      const dev = getActiveDevice();
+      const devLabel =
+        dev === 'webgpu' ? 'GPU 가속' : dev === 'wasm' ? 'CPU' : '';
+      const timeLabel = lastMs > 0 ? ` · 마지막 ${(lastMs / 1000).toFixed(1)}초` : '';
+      addToast(
+        'success',
+        `${ok}개 배경 제거 완료${devLabel ? ` (${devLabel}${timeLabel})` : ''}`,
+      );
+    }
     if (ok < pending.length)
       addToast(
         'error',

@@ -51,6 +51,14 @@ const MODEL_ID = 'briaai/RMBG-1.4';
 
 let modelPromise: Promise<Model> | null = null;
 
+/** 실제 추론에 사용 중인 연산장치. 로드 성공 후 확정된다. */
+let activeDevice: 'webgpu' | 'wasm' | null = null;
+
+/** 실제로 사용된 연산장치('webgpu'=GPU 가속 / 'wasm'=CPU). 로드 전엔 null. */
+export function getActiveDevice(): 'webgpu' | 'wasm' | null {
+  return activeDevice;
+}
+
 /**
  * 조각으로 나눠 올린 model.onnx 를 받아 하나로 합쳐 Response 로 돌려준다.
  * (Cloudflare Pages 의 파일당 25MB 제한 때문에 모델을 분할 배포한다.)
@@ -195,7 +203,9 @@ export function loadModel(
     return withModelFetch(async () => {
       if (supportsWebGPU) {
         try {
-          return await build('webgpu');
+          const built = await build('webgpu');
+          activeDevice = 'webgpu';
+          return built;
         } catch (err) {
           // WebGPU 초기화 실패(드라이버/브라우저 편차) 시 WASM 으로 폴백.
           console.warn(
@@ -204,7 +214,9 @@ export function loadModel(
           );
         }
       }
-      return build('wasm');
+      const built = await build('wasm');
+      activeDevice = 'wasm';
+      return built;
     });
   })();
 
