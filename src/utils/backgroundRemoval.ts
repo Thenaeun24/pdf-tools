@@ -166,17 +166,12 @@ export function loadModel(
       });
     };
 
-    const supportsWebGPU =
-      typeof navigator !== 'undefined' &&
-      'gpu' in navigator &&
-      (navigator as Navigator & { gpu?: unknown }).gpu != null;
-
     async function build(device: 'webgpu' | 'wasm') {
       const model = await AutoModel.from_pretrained(MODEL_ID, {
         // RMBG-1.4 는 커스텀 아키텍처라 model_type 을 명시해야 한다.
         config: { model_type: 'custom' } as never,
         device,
-        // 자체 호스팅한 모델은 fp32(model.onnx) 한 종류라 dtype 고정.
+        // 자체 호스팅 모델은 int8 양자화본 한 종류라 dtype 고정.
         dtype: 'fp32',
         progress_callback,
       });
@@ -200,20 +195,12 @@ export function loadModel(
       return { model, processor, RawImage };
     }
 
+    // 이 모델은 int8 양자화본이라 연산이 ConvInteger/DynamicQuantizeLinear 로
+    // 되어 있다. WebGPU 는 이 int8 연산을 가속하지 못해(미지원 → CPU 폴백 +
+    // GPU↔CPU 전송 오버헤드) 오히려 느리다. 반면 int8 은 WASM(CPU)에서 잘
+    // 최적화돼 있고 교차출처격리(_headers)로 멀티스레드까지 쓰므로 더 빠르다.
+    // 따라서 WebGPU 를 쓰지 않고 멀티스레드 WASM 으로 실행한다.
     return withModelFetch(async () => {
-      if (supportsWebGPU) {
-        try {
-          const built = await build('webgpu');
-          activeDevice = 'webgpu';
-          return built;
-        } catch (err) {
-          // WebGPU 초기화 실패(드라이버/브라우저 편차) 시 WASM 으로 폴백.
-          console.warn(
-            '[background-removal] WebGPU 실패, WASM 로 폴백합니다.',
-            err,
-          );
-        }
-      }
       const built = await build('wasm');
       activeDevice = 'wasm';
       return built;
