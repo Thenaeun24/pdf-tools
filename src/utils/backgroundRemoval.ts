@@ -33,6 +33,34 @@ const MODEL_ID = 'briaai/RMBG-1.4';
 
 let modelPromise: Promise<Model> | null = null;
 
+/**
+ * fn 실행 동안 fetch 를 감싸, "Failed to fetch" 같은 네트워크 오류에
+ * 어떤 URL 이 막혔는지 붙여준다(진단용). 끝나면 원래 fetch 로 복원.
+ */
+async function withFetchUrlDiagnostics<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof globalThis.fetch !== 'function') return fn();
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (input as Request).url;
+    try {
+      return await original(input, init);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(`네트워크 요청 실패 (${reason}): ${url}`);
+    }
+  };
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
 export interface LoadProgress {
   /** 0 ~ 100. 모델 가중치 다운로드 진행률(대략치). */
   percent: number;
@@ -103,15 +131,20 @@ export function loadModel(
       return { model, processor, RawImage };
     }
 
-    if (supportsWebGPU) {
-      try {
-        return await build('webgpu');
-      } catch (err) {
-        // WebGPU 초기화 실패(드라이버/브라우저 편차) 시 WASM 으로 폴백.
-        console.warn('[background-removal] WebGPU 실패, WASM 로 폴백합니다.', err);
+    return withFetchUrlDiagnostics(async () => {
+      if (supportsWebGPU) {
+        try {
+          return await build('webgpu');
+        } catch (err) {
+          // WebGPU 초기화 실패(드라이버/브라우저 편차) 시 WASM 으로 폴백.
+          console.warn(
+            '[background-removal] WebGPU 실패, WASM 로 폴백합니다.',
+            err,
+          );
+        }
       }
-    }
-    return build('wasm');
+      return build('wasm');
+    });
   })();
 
   return modelPromise;
