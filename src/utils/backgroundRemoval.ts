@@ -52,10 +52,42 @@ const MODEL_ID = 'briaai/RMBG-1.4';
 let modelPromise: Promise<Model> | null = null;
 
 /**
- * fn 실행 동안 fetch 를 감싸, "Failed to fetch" 같은 네트워크 오류에
- * 어떤 URL 이 막혔는지 붙여준다(진단용). 끝나면 원래 fetch 로 복원.
+ * 조각으로 나눠 올린 model.onnx 를 받아 하나로 합쳐 Response 로 돌려준다.
+ * (Cloudflare Pages 의 파일당 25MB 제한 때문에 모델을 분할 배포한다.)
  */
-async function withFetchUrlDiagnostics<T>(fn: () => Promise<T>): Promise<T> {
+async function assembleSplitModel(
+  modelUrl: string,
+  fetchFn: typeof fetch,
+): Promise<Response> {
+  const dir = modelUrl.slice(0, modelUrl.lastIndexOf('/') + 1); // .../onnx/
+  const manifestRes = await fetchFn(`${dir}model.parts.json`);
+  if (!manifestRes.ok) {
+    throw new Error(`매니페스트 로드 실패 (${manifestRes.status})`);
+  }
+  const manifest = (await manifestRes.json()) as { parts: string[] };
+  const buffers: ArrayBuffer[] = [];
+  for (const name of manifest.parts) {
+    const res = await fetchFn(`${dir}${name}`);
+    if (!res.ok) throw new Error(`모델 조각 ${name} 로드 실패 (${res.status})`);
+    buffers.push(await res.arrayBuffer());
+  }
+  const blob = new Blob(buffers, { type: 'application/octet-stream' });
+  return new Response(blob, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(blob.size),
+    },
+  });
+}
+
+/**
+ * fn 실행 동안 fetch 를 감싼다.
+ * - 분할된 model.onnx 요청은 조각을 받아 합쳐서 응답.
+ * - 그 외 네트워크 오류에는 어떤 URL 이 막혔는지 메시지에 붙인다(진단용).
+ * 끝나면 원래 fetch 로 복원.
+ */
+async function withModelFetch<T>(fn: () => Promise<T>): Promise<T> {
   if (typeof globalThis.fetch !== 'function') return fn();
   const original = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -65,6 +97,17 @@ async function withFetchUrlDiagnostics<T>(fn: () => Promise<T>): Promise<T> {
         : input instanceof URL
           ? input.href
           : (input as Request).url;
+    // 분할 모델 요청을 가로채 조각을 합쳐 응답한다.
+    // (쿼리/해시 제거 후 경로로 판별 → model.onnx.partN 은 매칭되지 않음)
+    const path = url.split('?')[0].split('#')[0];
+    if (path.endsWith('/onnx/model.onnx')) {
+      try {
+        return await assembleSplitModel(path, original);
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        throw new Error(`모델 조립 실패 (${reason}): ${url}`);
+      }
+    }
     try {
       return await original(input, init);
     } catch (e) {
@@ -149,7 +192,7 @@ export function loadModel(
       return { model, processor, RawImage };
     }
 
-    return withFetchUrlDiagnostics(async () => {
+    return withModelFetch(async () => {
       if (supportsWebGPU) {
         try {
           return await build('webgpu');
