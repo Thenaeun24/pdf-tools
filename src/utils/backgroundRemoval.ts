@@ -2,8 +2,9 @@
  * 브라우저 안에서만 동작하는 배경 제거(누끼) 유틸.
  *
  * - briaai/RMBG-1.4 모델을 transformers.js(WASM/WebGPU)로 실행한다.
- * - 이미지 픽셀은 절대 네트워크로 나가지 않는다. 모델 가중치/런타임만
- *   HuggingFace·jsDelivr CDN 에서 받아 IndexedDB 에 캐시한다(최초 1회).
+ * - 모델 가중치(onnx)와 런타임(wasm)을 외부 CDN(HuggingFace/jsDelivr) 이 아니라
+ *   이 사이트가 서빙하는 자체 경로(/models, /ort)에서 로드한다. 그래서 외부망이
+ *   막힌 환경에서도 동작하고, 이미지 픽셀은 애초에 네트워크로 나가지 않는다.
  * - 결과는 배경이 투명한 PNG Blob.
  */
 
@@ -12,11 +13,28 @@ type Transformers = typeof import('@huggingface/transformers');
 
 let transformersPromise: Promise<Transformers> | null = null;
 
+/**
+ * 현재 페이지 기준 자산 베이스 URL. basePath(예: GitHub Pages 의 /pdf-tools/)
+ * 아래에 배포돼도 올바른 절대경로가 나오도록 document.baseURI 로 계산한다.
+ */
+function assetBase(): string {
+  if (typeof document !== 'undefined' && document.baseURI) {
+    return new URL('./', document.baseURI).href;
+  }
+  return '/';
+}
+
 function loadTransformers(): Promise<Transformers> {
   if (!transformersPromise) {
     transformersPromise = import('@huggingface/transformers').then((mod) => {
-      // 로컬 파일 시스템 조회를 끄고 CDN(HF Hub)에서만 모델을 받는다.
-      mod.env.allowLocalModels = false;
+      const base = assetBase();
+      // 원격(HF) 조회를 끄고, 이 사이트가 서빙하는 로컬 경로에서만 모델을 읽는다.
+      mod.env.allowRemoteModels = false;
+      mod.env.allowLocalModels = true;
+      mod.env.localModelPath = `${base}models/`;
+      // ONNX 런타임 wasm 도 jsDelivr 대신 자체 호스팅 경로에서 로드.
+      const wasm = mod.env.backends?.onnx?.wasm;
+      if (wasm) wasm.wasmPaths = `${base}ort/`;
       return mod;
     });
   }
@@ -107,8 +125,8 @@ export function loadModel(
         // RMBG-1.4 는 커스텀 아키텍처라 model_type 을 명시해야 한다.
         config: { model_type: 'custom' } as never,
         device,
-        // WebGPU 는 fp16 가 안정적, WASM 은 fp32.
-        dtype: device === 'webgpu' ? 'fp16' : 'fp32',
+        // 자체 호스팅한 모델은 fp32(model.onnx) 한 종류라 dtype 고정.
+        dtype: 'fp32',
         progress_callback,
       });
       const processor = await AutoProcessor.from_pretrained(MODEL_ID, {

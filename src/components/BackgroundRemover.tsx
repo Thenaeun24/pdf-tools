@@ -212,8 +212,8 @@ export default function BackgroundRemover({
         </p>
         <p className="mt-1">
           브라우저 안에서 AI 모델(RMBG-1.4)로 배경을 제거합니다. 최초 1회만
-          모델 파일(약 40MB)을 내려받아 캐시하며, 이미지 자체는 서버로
-          전송되지 않습니다.
+          모델 파일(약 44MB)을 이 사이트에서 받아 캐시하며(외부 CDN 미사용),
+          이미지 자체는 서버로 전송되지 않습니다.
           {isWebGPUAvailable()
             ? ' 이 브라우저는 WebGPU 가속을 지원해 빠르게 처리됩니다.'
             : ' (WebGPU 미지원 브라우저라 CPU로 처리되어 이미지당 수 초 걸릴 수 있습니다.)'}
