@@ -9,9 +9,10 @@ import PdfMerge from '@/components/PdfMerge';
 import PdfSplit from '@/components/PdfSplit';
 import PdfRotate from '@/components/PdfRotate';
 import PdfMarkup from '@/components/PdfMarkup';
+import BackgroundRemover from '@/components/BackgroundRemover';
 import { useToast } from '@/hooks/useToast';
 
-type TabId = 'convert' | 'merge' | 'split' | 'rotate' | 'markup';
+type TabId = 'convert' | 'merge' | 'split' | 'rotate' | 'markup' | 'bgremove';
 
 const TABS: TabItem[] = [
   { id: 'convert', label: 'PDF ↔ 이미지' },
@@ -19,6 +20,7 @@ const TABS: TabItem[] = [
   { id: 'split', label: 'PDF 분할' },
   { id: 'rotate', label: 'PDF 회전' },
   { id: 'markup', label: 'PDF 마크업' },
+  { id: 'bgremove', label: '누끼 따기' },
 ];
 
 export default function HomePage() {
@@ -52,6 +54,9 @@ export default function HomePage() {
         {activeTab === 'split' ? <PdfSplit addToast={addToast} /> : null}
         {activeTab === 'rotate' ? <PdfRotate addToast={addToast} /> : null}
         {activeTab === 'markup' ? <PdfMarkup addToast={addToast} /> : null}
+        {activeTab === 'bgremove' ? (
+          <BackgroundRemover addToast={addToast} />
+        ) : null}
       </main>
 
       <Footer />

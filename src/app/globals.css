@@ -61,3 +61,15 @@ body {
 .animate-toast-in {
   animation: toast-slide-in 0.22s ease-out both;
 }
+
+/* 투명(누끼) 이미지 미리보기용 체커보드 배경 */
+.checkerboard {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #e4e4e7 25%, transparent 25%),
+    linear-gradient(-45deg, #e4e4e7 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e4e4e7 75%),
+    linear-gradient(-45deg, transparent 75%, #e4e4e7 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
