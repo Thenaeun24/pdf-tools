@@ -34,7 +34,12 @@ function loadTransformers(): Promise<Transformers> {
       mod.env.localModelPath = `${base}models/`;
       // ONNX 런타임 wasm 도 jsDelivr 대신 자체 호스팅 경로에서 로드.
       const wasm = mod.env.backends?.onnx?.wasm;
-      if (wasm) wasm.wasmPaths = `${base}ort/`;
+      if (wasm) {
+        wasm.wasmPaths = `${base}ort/`;
+        // 추론을 Web Worker 에서 실행해 메인 스레드(화면)를 막지 않는다.
+        // (이 옵션이 없으면 무거운 연산 동안 브라우저가 "응답 없음" 상태가 됨)
+        wasm.proxy = true;
+      }
       return mod;
     });
   }
