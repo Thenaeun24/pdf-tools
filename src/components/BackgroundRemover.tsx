@@ -7,8 +7,6 @@ import FileDropZone from './FileDropZone';
 import ProgressBar from './ProgressBar';
 import {
   removeBackground,
-  isWebGPUAvailable,
-  getActiveDevice,
   type LoadProgress,
 } from '@/utils/backgroundRemoval';
 import { createFileItem } from '@/utils/fileUtils';
@@ -177,14 +175,9 @@ export default function BackgroundRemover({
 
     setBusy(false);
     if (ok > 0) {
-      const dev = getActiveDevice();
-      const devLabel =
-        dev === 'webgpu' ? 'GPU 가속' : dev === 'wasm' ? 'CPU' : '';
-      const timeLabel = lastMs > 0 ? ` · 마지막 ${(lastMs / 1000).toFixed(1)}초` : '';
-      addToast(
-        'success',
-        `${ok}개 배경 제거 완료${devLabel ? ` (${devLabel}${timeLabel})` : ''}`,
-      );
+      const timeLabel =
+        lastMs > 0 ? ` (마지막 ${(lastMs / 1000).toFixed(1)}초)` : '';
+      addToast('success', `${ok}개 배경 제거 완료${timeLabel}`);
     }
     if (ok < pending.length)
       addToast(
@@ -226,10 +219,8 @@ export default function BackgroundRemover({
         <p className="mt-1">
           브라우저 안에서 AI 모델(RMBG-1.4)로 배경을 제거합니다. 최초 1회만
           모델 파일(약 44MB)을 이 사이트에서 받아 캐시하며(외부 CDN 미사용),
-          이미지 자체는 서버로 전송되지 않습니다.
-          {isWebGPUAvailable()
-            ? ' 이 브라우저는 WebGPU 가속을 지원해 빠르게 처리됩니다.'
-            : ' (WebGPU 미지원 브라우저라 CPU로 처리되어 이미지당 수 초 걸릴 수 있습니다.)'}
+          이미지 자체는 서버로 전송되지 않습니다. 처리 성능은 PC 사양에 따라
+          이미지당 수 초~수십 초가 걸릴 수 있습니다.
         </p>
       </div>
 
