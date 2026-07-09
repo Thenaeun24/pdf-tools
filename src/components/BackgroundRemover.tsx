@@ -47,7 +47,9 @@ export default function BackgroundRemover({
   const [doneCount, setDoneCount] = useState(0);
   const [batchTotal, setBatchTotal] = useState(0);
   const itemsRef = useRef<ResultItem[]>([]);
-  itemsRef.current = items;
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   // 원본 File 은 상태에 담지 않고 id → File 맵으로 따로 보관.
   const fileMap = useRef<Map<string, File>>(new Map());
 
@@ -127,6 +129,7 @@ export default function BackgroundRemover({
     };
 
     let ok = 0;
+    let firstError = '';
     for (const target of pending) {
       const file = fileMap.current.get(target.id);
       if (!file) continue;
@@ -150,15 +153,16 @@ export default function BackgroundRemover({
           ),
         );
       } catch (err) {
-        console.error(err);
+        console.error('[background-removal] 처리 실패:', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!firstError) firstError = msg;
         setItems((prev) =>
           prev.map((i) =>
             i.id === target.id
               ? {
                   ...i,
                   status: 'error',
-                  error:
-                    err instanceof Error ? err.message : '처리 중 오류',
+                  error: msg,
                 }
               : i,
           ),
@@ -170,7 +174,10 @@ export default function BackgroundRemover({
     setBusy(false);
     if (ok > 0) addToast('success', `${ok}개 이미지 배경 제거 완료.`);
     if (ok < pending.length)
-      addToast('error', `${pending.length - ok}개는 처리에 실패했습니다.`);
+      addToast(
+        'error',
+        `${pending.length - ok}개 실패${firstError ? `: ${firstError.slice(0, 120)}` : ''}`,
+      );
   }, [addToast]);
 
   const downloadOne = useCallback((item: ResultItem) => {
@@ -269,8 +276,16 @@ export default function BackgroundRemover({
                     </div>
                   ) : null}
                   {item.status === 'error' ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-rose-50/80 px-2 text-center text-xs font-medium text-rose-700">
-                      실패
+                    <div
+                      title={item.error}
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-rose-50/90 px-2 text-center text-[11px] font-medium text-rose-700"
+                    >
+                      <span className="font-semibold">실패</span>
+                      {item.error ? (
+                        <span className="line-clamp-3 leading-tight opacity-80">
+                          {item.error}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                   {item.status === 'done' ? (

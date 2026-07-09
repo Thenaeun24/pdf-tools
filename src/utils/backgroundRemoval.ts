@@ -85,6 +85,9 @@ export function loadModel(
       });
       const processor = await AutoProcessor.from_pretrained(MODEL_ID, {
         config: {
+          // RMBG-1.4 레포에는 transformers.js 용 preprocessor 설정이 없어서
+          // feature_extractor_type 을 명시하지 않으면 프로세서 생성이 실패한다.
+          feature_extractor_type: 'ImageFeatureExtractor',
           do_normalize: true,
           do_pad: false,
           do_rescale: true,
@@ -140,12 +143,36 @@ export async function removeBackground(
 
     // 전처리 → 추론 → 마스크 추출
     const { pixel_values } = await processor(image);
-    const { output } = await model({ input: pixel_values });
+    const result = (await model({ input: pixel_values })) as Record<
+      string,
+      unknown
+    >;
 
-    // 마스크를 원본 해상도로 리사이즈(0~255 알파).
-    const mask = await RawImage.fromTensor(
-      output[0].mul(255).to('uint8'),
-    ).resize(image.width, image.height);
+    // ONNX 출력 이름이 'output' 이 아닐 수 있으므로 방어적으로 첫 텐서를 고른다.
+    type Tensorish = {
+      mul: (n: number) => Tensorish;
+      to: (t: string) => Tensorish;
+      [index: number]: Tensorish;
+    };
+    const isTensor = (v: unknown): v is Tensorish =>
+      !!v && typeof (v as { mul?: unknown }).mul === 'function';
+
+    const outputTensor: Tensorish | undefined = isTensor(result.output)
+      ? result.output
+      : (Object.values(result).find(isTensor) as Tensorish | undefined);
+
+    if (!outputTensor) {
+      throw new Error(
+        `모델 출력 형식을 해석하지 못했습니다: ${Object.keys(result).join(', ')}`,
+      );
+    }
+
+    // 배치 차원[0] 을 제거한 뒤 0~255 알파 마스크로 변환, 원본 해상도로 리사이즈.
+    const maskTensor = outputTensor[0].mul(255).to('uint8');
+    const mask = await RawImage.fromTensor(maskTensor as never).resize(
+      image.width,
+      image.height,
+    );
 
     // 원본을 캔버스에 그리고 알파 채널을 마스크로 교체.
     const canvas = document.createElement('canvas');
